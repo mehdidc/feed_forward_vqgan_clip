@@ -150,12 +150,10 @@ def train():
     epochs = 1000000
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
-    # net = stylegan.SGDummy(latent_dim=512, image_size=16, truncate=32, nb_channels=256, network_capacity=16, depth=1).to(device)
     clip_dim = 512
     channels = 256
-    nb_gen = 1
     vq = 16
-    net = Mixer(input_dim=512, image_size=vq, channels=channels, patch_size=1, dim=128, depth=8, nb_gen=nb_gen).to(device)
+    net = Mixer(input_dim=512, image_size=vq, channels=channels, patch_size=1, dim=128, depth=8).to(device)
 
     opt = optim.Adam(net.parameters(), lr=lr)
     mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
@@ -168,8 +166,6 @@ def train():
     L = 1. 
     bs = 2
     step = 0
-    div_loss_coef = 0
-    mask = (1-torch.eye(nb_gen)).view(1,1,nb_gen,nb_gen,1).to(device)
     for e in range(epochs):
         random.shuffle(texts)
         for j in range(0, len(texts), bs):
@@ -178,50 +174,37 @@ def train():
             #bs,clip_dim
             H = perceptor.encode_text(clip.tokenize(T).to(device)).float()
             z = net(H)
-            #bs*nb_gen, channels, vq, vq
+            #bs, channels, vq, vq
             z = z.contiguous()
-            z = z.view(bs * nb_gen, channels, vq, vq)
+            z = z.view(bs, channels, vq, vq)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
-            #bs*nb_gen, 3, h, w
+            #bs, 3, h, w
             xr = synth(model, z)
-            #cutn*bs*nb_gen,3,h,w
+            #cutn*bs,3,h,w
             x = make_cutouts(xr)
             x = (x-mean)/std
-            #cutn*bs*nb_gen,clip_dim
+            #cutn*bs,clip_dim
             embed = perceptor.encode_image(x).float()
-            #nb_gen*bs,clip_dim
-            H = H.repeat(nb_gen, 1)
-            #cutn*nb_gen*bs,clip_dim
+            #cutn*bs,clip_dim
             H = H.repeat(cutn, 1)
-            H = H.view(cutn, nb_gen, bs, clip_dim)
-            #cutn,bs,nb_gen,clip_dim
-            # H = H.permute(0,2,1,3)
+            H = H.view(cutn, bs, clip_dim)
             H = F.normalize(H, dim=-1)
-            #cutn*bs*nb_gen,clip_dim
+            #cutn*bs,clip_dim
             H = H.view(-1, clip_dim)
-
+            
+            #cutn*bs,clip_dim
             embed = F.normalize(embed, dim=1)
 
-            if div_loss_coef:
-                em = embed.view(cutn,bs,nb_gen,clip_dim)
-                em_a = em.view(cutn,bs,nb_gen,1,clip_dim)
-                em_b = em.view(cutn,bs,1,nb_gen,clip_dim)
-                NB = mask.sum()
-                # div_loss = (mask*((em_a*em_b).sum(dim=-1))).sum() / (NB*bs*cutn)#minimize dot product
-                # div_loss = -(mask*((em_a-em_b).norm(dim=-1).div(2).arcsin().pow(2).mul(2))).sum() / (NB*bs*cutn)#minimize dot product
-                div_loss = -z.view(bs,nb_gen,channels,vq,vq).std(dim=1).mean()
-            else:
-                div_loss = torch.Tensor([0]).float().to(device)
             #maximize clip score
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
             opt.zero_grad()
-            loss = dists + div_loss * div_loss_coef
+            loss = dists 
             loss.backward()
             opt.step()
             L = loss.item() * 0.1 + L * 0.9 
             if step % 100 == 0:
-                print(e, step, L, loss.item(), dists.item(), div_loss.item())
-                g = torchvision.utils.make_grid(xr.cpu(), nrow=nb_gen)
+                print(e, step, L, loss.item())
+                g = torchvision.utils.make_grid(xr.cpu(), nrow=len(xr))
                 TF.to_pil_image(g).save('progress.png')
                 TF.to_pil_image(g).save(f'steps/progress_{step:010d}.png')
                 torch.save(net, "model.th")
