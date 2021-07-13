@@ -38,22 +38,22 @@ def MLPMixer(image_size, channels, patch_size, dim, depth, expansion_factor = 4,
 
 class Mixer(torch.nn.Module):
 
-    def __init__(self, input_dim, image_size, channels, patch_size, dim, depth, expansion_factor = 4, dropout = 0., nb_gen=1):
+    def __init__(self, input_dim, image_size, channels, patch_size, dim, depth, expansion_factor = 4, dropout = 0.):
         super().__init__()
         self.mixer = MLPMixer(image_size, channels, patch_size, dim, depth, expansion_factor=expansion_factor, dropout=dropout)
-        self.proj = nn.Linear(input_dim, nb_gen*image_size*image_size*channels)
+        self.proj = nn.Linear(input_dim, image_size*image_size*channels)
         self.final_proj = nn.Linear(dim, channels)
         self.channels = channels
         self.image_size = image_size
-        self.nb_gen = nb_gen
     
     def forward(self, x):
         bs = len(x)
         x = self.proj(x)
-        x = x.view(bs*self.nb_gen, self.channels, self.image_size, self.image_size)
+        x = x + torch.randn_like(x)
+        x = x.view(bs, self.channels, self.image_size, self.image_size)
         x = self.mixer(x)
         x = self.final_proj(x)
-        x = x.view(bs*self.nb_gen, self.image_size, self.image_size, self.channels)
+        x = x.view(bs, self.image_size, self.image_size, self.channels)
         x = x.permute(0,3,1,2,)
         return x
 

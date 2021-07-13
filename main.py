@@ -1,4 +1,5 @@
 from clize import run
+from glob import glob
 import random
 import argparse
 import math
@@ -25,6 +26,8 @@ import imageio
 from PIL import ImageFile, Image
 import stylegan
 from mlp_mixer_pytorch import Mixer
+import horovod.torch as hvd
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def load_vqgan_model(config_path, checkpoint_path):
@@ -140,8 +143,15 @@ class MakeCutouts(nn.Module):
 
 
 def train():
+    hvd.init()
+    torch.cuda.set_device(hvd.local_rank())
+
     # texts = ["sunflower"]
     texts = [t.strip() for t in open("input.txt").readlines()]
+    # texts = [open(f).read().strip() for f in glob("../data/blog_captions/*.txt")]
+    # texts = texts[0:100]
+    # print(texts[0])
+    print(len(texts))
     device = "cuda" if torch.cuda.is_available() else "cpu"
     vqgan_config = "vqgan_imagenet_f16_16384.yaml"
     vqgan_checkpoint = "vqgan_imagenet_f16_16384.ckpt"
@@ -156,6 +166,10 @@ def train():
     net = Mixer(input_dim=512, image_size=vq, channels=channels, patch_size=1, dim=128, depth=8).to(device)
 
     opt = optim.Adam(net.parameters(), lr=lr)
+    opt = hvd.DistributedOptimizer(opt)
+    hvd.broadcast_parameters(net.state_dict(), root_rank=0)
+    hvd.broadcast_optimizer_state(opt, root_rank=0)
+
     mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
     std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
     clip_size = 224
@@ -164,7 +178,7 @@ def train():
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     L = 1. 
-    bs = 2
+    bs = 8
     step = 0
     for e in range(epochs):
         random.shuffle(texts)
@@ -202,7 +216,7 @@ def train():
             loss.backward()
             opt.step()
             L = loss.item() * 0.1 + L * 0.9 
-            if step % 100 == 0:
+            if (hvd.rank() == 0) and step % 100 == 0:
                 print(e, step, L, loss.item())
                 g = torchvision.utils.make_grid(xr.cpu(), nrow=len(xr))
                 TF.to_pil_image(g).save('progress.png')
