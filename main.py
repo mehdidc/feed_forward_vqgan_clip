@@ -1,3 +1,7 @@
+# Based on https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ
+# thanks to the authors
+
+import os
 from clize import run
 from glob import glob
 import random
@@ -18,6 +22,7 @@ from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
 from tqdm.notebook import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 import clip
 import kornia.augmentation as K
@@ -26,8 +31,22 @@ import imageio
 from PIL import ImageFile, Image
 import stylegan
 from mlp_mixer_pytorch import Mixer
-import horovod.torch as hvd
+from clip import simple_tokenizer
 
+from taming.modules.losses.lpips import LPIPS
+from taming.modules.losses.lpips import normalize_tensor
+import vq as VQ
+
+
+from omegaconf import OmegaConf
+
+try:
+    import horovod.torch as hvd
+    USE_HOROVOD = True
+except ImportError:
+    USE_HOROVOD = False
+
+decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def load_vqgan_model(config_path, checkpoint_path):
@@ -141,59 +160,166 @@ class MakeCutouts(nn.Module):
             batch = batch + facs * torch.randn_like(batch)
         return batch
 
-
-def train():
-    hvd.init()
-    torch.cuda.set_device(hvd.local_rank())
-
-    # texts = ["sunflower"]
-    texts = [t.strip() for t in open("input.txt").readlines()]
-    # texts = [open(f).read().strip() for f in glob("../data/blog_captions/*.txt")]
-    # texts = texts[0:100]
-    # print(texts[0])
-    print(len(texts))
+def encode_images(fname, *, root_folder="", out="features.pkl"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    vqgan_config = "vqgan_imagenet_f16_16384.yaml"
-    vqgan_checkpoint = "vqgan_imagenet_f16_16384.ckpt"
-    clip_model = "ViT-B/32"
-    lr = 0.001
-    epochs = 1000000
+    model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    paths = open(fname).readlines()
+    paths = [root_folder + p.strip() for p in paths]
+    features = []
+    for p in paths:
+        print(p)
+        image = preprocess(Image.open(p)).unsqueeze(0).to(device)
+        with torch.no_grad():
+            image_features = model.encode_image(image)
+        features.append(image_features.cpu())
+    features = torch.cat(features)
+    torch.save(features, out)
+
+
+def tokenize(paths, out="tokenized.pkl"):
+    texts = [open(f).read().strip() for f in glob(paths)]
+    print(len(texts))
+    T = clip.tokenize(texts)
+    torch.save(T, out)
+
+def train(config_file):
+    config = OmegaConf.load(config_file)
+    
+    if USE_HOROVOD:
+        hvd.init()
+        torch.cuda.set_device(hvd.local_rank())
+        print(hvd.local_rank())
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    lpips = LPIPS()
+    lpips.load_from_pretrained()
+    lpips = lpips.to(device)
+    
+    path = config.path
+    if path.endswith("pkl"):
+        toks = torch.load(path)
+    elif "*" in path:
+        texts = [open(f).read().strip() for f in glob(path)]
+        toks = clip.tokenize(texts)
+    else:
+        texts = [t.strip() for t in open(path).readlines()]
+        toks = clip.tokenize(texts)
+    print(len(toks))
+    vqgan_config = config.vqgan_config
+    vqgan_checkpoint = config.vqgan_checkpoint
+    clip_model = config.clip_model 
+    lr = config.lr
+    epochs = config.epochs
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     clip_dim = 512
     channels = 256
-    vq = 16
-    net = Mixer(input_dim=512, image_size=vq, channels=channels, patch_size=1, dim=128, depth=8).to(device)
-
+    vq_image_size = 16
+    noise_dim = config.noise_dim
+    net = Mixer(
+        input_dim=clip_dim+noise_dim, 
+        image_size=vq_image_size, 
+        channels=channels, 
+        patch_size=1, 
+        dim=config.dim, 
+        depth=config.depth, 
+        dropout=config.dropout)
+    net = net.to(device)
+    net.config = config
+    # net = VQ.Decoder(ch=256, out_ch=256,num_res_blocks=1, channels=128, resolution=1, z_channels=512+noise_dim, attn_resolutions=[], in_channels=512+noise_dim, ch_mult=(1,2,2,2,2)).to(device)
+    # net = stylegan.SGDummy(image_size=vq, latent_dim=clip_dim, nb_channels=channels).to(device)
+    # Z = torch.randn(8, 256, 16, 16).to(device)
     opt = optim.Adam(net.parameters(), lr=lr)
-    opt = hvd.DistributedOptimizer(opt)
-    hvd.broadcast_parameters(net.state_dict(), root_rank=0)
-    hvd.broadcast_optimizer_state(opt, root_rank=0)
+    # opt = optim.Adam(chain(net.parameters(), model.parameters()), lr=lr)
+    # opt = optim.Adam([Z], lr=lr)
+    
+    rank_zero =  (USE_HOROVOD and hvd.rank() == 0) or not USE_HOROVOD
+    if rank_zero:
+        log_writer = SummaryWriter(config.folder)
+    else:
+        log_writer = None
+
+    if USE_HOROVOD:
+        opt = hvd.DistributedOptimizer(opt)
+        hvd.broadcast_parameters(net.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(opt, root_rank=0)
 
     mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
     std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
     clip_size = 224
-    cutn = 8
+    cutn = config.cutn
     make_cutouts = MakeCutouts(clip_size, cutn=cutn)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     L = 1. 
-    bs = 8
+    bs = config.batch_size
     step = 0
+    repeat = config.repeat
+    nb_noise = config.nb_noise
+    dataset = torch.utils.data.TensorDataset(toks)
+    if USE_HOROVOD:
+        sampler = torch.utils.data.DistributedSampler(
+            dataset,
+            num_replicas=hvd.size(),
+            rank=hvd.rank(),
+        )
+        shuffle=  None
+    else:
+        sampler = None
+        shuffle = True
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=1, sampler=sampler, shuffle=shuffle)
+    NOISE = torch.randn(nb_noise,noise_dim)
+    if USE_HOROVOD:
+        NOISE = hvd.broadcast(NOISE, root_rank=0)
+    net.NOISE = NOISE
     for e in range(epochs):
-        random.shuffle(texts)
-        for j in range(0, len(texts), bs):
-            T = texts[j:j+bs]
+        sampler.set_epoch(e)
+        for T, in dataloader:
+            T = T.to(device)
             bs = len(T)
             #bs,clip_dim
-            H = perceptor.encode_text(clip.tokenize(T).to(device)).float()
-            z = net(H)
+            if T.dtype == torch.long:
+                H = perceptor.encode_text(T).float()
+            else:
+                H = T.float()
+            H = H.repeat(repeat, 1)
+            if noise_dim:
+                inds = np.arange(len(NOISE))
+                np.random.shuffle(inds)
+                inds = inds[:repeat]
+                noise = NOISE[inds].to(device).repeat(bs, 1).view(bs,repeat,-1).permute(1,0,2).contiguous().view(bs*repeat,-1)
+                Hi = torch.cat((H,noise),dim=1)
+            else:
+                Hi = H
+            z = net(Hi)
             #bs, channels, vq, vq
             z = z.contiguous()
-            z = z.view(bs, channels, vq, vq)
+            z = z.view(repeat*bs, channels, vq_image_size, vq_image_size)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #bs, 3, h, w
             xr = synth(model, z)
+            if config.diversity_coef:
+                div = 0
+                # for feats in [z]:
+                for feats in lpips.net( (xr-mean)/std):
+                # for feats in [inception(xr*2-1)[0]]:
+                    # feats = feats.view(len(feats), -1)
+                    feats = normalize_tensor(feats)
+                    # feats = perceptor.encode_image( (xr[:,:,:224,:224]-mean)/std  ).float()
+                    # feats = normalize_tensor(lpips.net( (xr-mean)/std  ).relu4_3.view(bs,-1))
+                    _, cc,hh,ww = feats.shape
+                    # feats = xr.view(bs,-1)
+                    # NB = bs * mask.sum()
+                    # diversity loss between all pairs, like <https://arxiv.org/pdf/1703.01664.pdf>
+                    # div +=  ((feats.view(repeat, 1, bs, -1) - feats.view(1, repeat, bs, -1)) ** 2).sum(dim=-1).mean()
+                    div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
+                    # div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=(0,1,2)).mean()
+                    # feats = feats.mean(dim=(2,3))
+                    # div += feats.std(dim=0).mean()
+                    # for i,j in combinations(range( len(feats) ), 2):
+                    # div += ((feats[i]-feats[j])**2).sum(dim=0).mean()
+            else:
+                div = torch.Tensor([0.]).to(device)
             #cutn*bs,3,h,w
             x = make_cutouts(xr)
             x = (x-mean)/std
@@ -201,7 +327,7 @@ def train():
             embed = perceptor.encode_image(x).float()
             #cutn*bs,clip_dim
             H = H.repeat(cutn, 1)
-            H = H.view(cutn, bs, clip_dim)
+            H = H.view(cutn, repeat, bs, clip_dim)
             H = F.normalize(H, dim=-1)
             #cutn*bs,clip_dim
             H = H.view(-1, clip_dim)
@@ -212,38 +338,57 @@ def train():
             #maximize clip score
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
             opt.zero_grad()
-            loss = dists 
+            loss = dists  - config.diversity_coef*div
             loss.backward()
             opt.step()
-            L = loss.item() * 0.1 + L * 0.9 
-            if (hvd.rank() == 0) and step % 100 == 0:
-                print(e, step, L, loss.item())
-                g = torchvision.utils.make_grid(xr.cpu(), nrow=len(xr))
-                TF.to_pil_image(g).save('progress.png')
-                TF.to_pil_image(g).save(f'steps/progress_{step:010d}.png')
-                torch.save(net, "model.th")
-                with open("progress.txt", "w") as fd:
-                    fd.write("\n".join(T))
+            if rank_zero: 
+                log_writer.add_scalar("loss", loss.item(), step)
+                log_writer.add_scalar("dists", dists.item(), step)
+                log_writer.add_scalar("diversity", div.item(), step)
+            L = loss.item() * 0.01 + L * 0.99 
+            if rank_zero and step % 100 == 0:
+                print(e, step, L, loss.item(), dists.item(), div.item())
+                g = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
+                TF.to_pil_image(g).save(os.path.join(config.folder, 'progress.png'))
+                TF.to_pil_image(g).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
+                torch.save(net, os.path.join(config.folder, "model.th"))
+                if T.dtype == torch.long:
+                    with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
+                        text = [decode(t.tolist()) for t in T]
+                        fd.write("\n".join(text))
             step += 1
 
 
-def test(model_path, text):
+def test(model_path, text, *, nb=1):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    config = net.config
     net = torch.load(model_path, map_location="cpu").to(device)
-    vqgan_config = "vqgan_imagenet_f16_16384.yaml"
-    vqgan_checkpoint = "vqgan_imagenet_f16_16384.ckpt"
-    clip_model = "ViT-B/32"
+    vqgan_config = config.vqgan_config 
+    vqgan_checkpoint = config.vqgan_checkpoint
+    clip_model = config.clip_model
+    clip_latent_dim = 512
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     texts = text.split("|")
     H = perceptor.encode_text(clip.tokenize(texts).to(device)).float()
-    z = net(H)
-    z = clamp_with_grad(z, z_min.min(), z_max.max())
-    xr = synth(model, z)
-    g = torchvision.utils.make_grid(xr.cpu(), nrow=len(xr))
+    H = H.repeat(nb, 1)
+    noise_dim = net.input_dim - clip_latent_dim
+    if noise_dim:
+        if hasattr(net, "NOISE"):
+            noise = net.NOISE[:nb].to(device)
+            print(noise)
+        else:
+            noise = torch.randn(len(H), noise_dim).to(device)
+        H = torch.cat((H, noise), dim=1)
+    net.train()
+    with torch.no_grad():
+        z = net(H)
+        z = clamp_with_grad(z, z_min.min(), z_max.max())
+        xr = synth(model, z)
+    g = torchvision.utils.make_grid(xr.cpu(), nrow=nb)
     TF.to_pil_image(g).save('gen.png')
 
 if __name__ == "__main__":
-    run([train, test])
+    run([train, test, tokenize, encode_images])
