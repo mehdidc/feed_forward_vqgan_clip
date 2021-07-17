@@ -183,7 +183,10 @@ def tokenize(paths, out="tokenized.pkl"):
     torch.save(T, out)
 
 def train(config_file):
+
     config = OmegaConf.load(config_file)
+    if not hasattr(config, "folder"):
+        config.folder = os.path.dirname(config_file)
     
     if USE_HOROVOD:
         hvd.init()
@@ -361,8 +364,8 @@ def train(config_file):
 
 def test(model_path, text, *, nb=1):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    config = net.config
     net = torch.load(model_path, map_location="cpu").to(device)
+    config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
