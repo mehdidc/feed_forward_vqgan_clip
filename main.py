@@ -228,30 +228,25 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     clip_dim = 512
-    channels = 256
+    vq_channels = 256
     vq_image_size = 16
     noise_dim = config.noise_dim
     model_path = os.path.join(config.folder, "model.th")
     if os.path.exists(model_path):
-        print("Resuming")
+        print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
     else:
         net = Mixer(
             input_dim=clip_dim+noise_dim, 
             image_size=vq_image_size, 
-            channels=channels, 
+            channels=vq_channels, 
             patch_size=1, 
             dim=config.dim, 
             depth=config.depth, 
             dropout=config.dropout)
     net = net.to(device)
     net.config = config
-    # net = VQ.Decoder(ch=256, out_ch=256,num_res_blocks=1, channels=128, resolution=1, z_channels=512+noise_dim, attn_resolutions=[], in_channels=512+noise_dim, ch_mult=(1,2,2,2,2)).to(device)
-    # net = stylegan.SGDummy(image_size=vq, latent_dim=clip_dim, nb_channels=channels).to(device)
-    # Z = torch.randn(8, 256, 16, 16).to(device)
     opt = optim.Adam(net.parameters(), lr=lr)
-    # opt = optim.Adam(chain(net.parameters(), model.parameters()), lr=lr)
-    # opt = optim.Adam([Z], lr=lr)
     
     rank_zero =  (USE_HOROVOD and hvd.rank() == 0) or not USE_HOROVOD
     if rank_zero:
@@ -315,9 +310,9 @@ def train(config_file):
             else:
                 Hi = H
             z = net(Hi)
-            #bs, channels, vq, vq
+            #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
-            z = z.view(repeat*bs, channels, vq_image_size, vq_image_size)
+            z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #bs, 3, h, w
             xr = synth(model, z)
