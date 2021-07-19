@@ -283,13 +283,14 @@ def train(config_file):
         sampler = None
         shuffle = True
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=1, sampler=sampler, shuffle=shuffle)
-    if hasattr(net, "NOISE"):
-        NOISE = net.NOISE
-    else:
-        NOISE = torch.randn(nb_noise,noise_dim)
-    if USE_HOROVOD:
-        NOISE = hvd.broadcast(NOISE, root_rank=0)
-    net.NOISE = NOISE
+    if nb_noise:
+        if hasattr(net, "NOISE"):
+            NOISE = net.NOISE
+        else:
+            NOISE = torch.randn(nb_noise,noise_dim)
+        if USE_HOROVOD:
+            NOISE = hvd.broadcast(NOISE, root_rank=0)
+        net.NOISE = NOISE
     for e in range(epochs):
         sampler.set_epoch(e)
         for T, in dataloader:
