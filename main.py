@@ -9,43 +9,38 @@ to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Ele
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to @afiaka87, who provided the blog captions dataset for experimentation.
 """
-
-
 import os
 from clize import run
 from glob import glob
 import random
-import argparse
 import math
 from pathlib import Path
 import sys
 import torchvision
-sys.path.insert(1, 'taming-transformers')
+# sys.path.insert(1, 'taming-transformers')
 from base64 import b64encode
 from omegaconf import OmegaConf
 from PIL import Image
-from taming.models import cond_transformer, vqgan
-import taming.modules 
+from PIL import ImageFile, Image
+import numpy as np
+import kornia.augmentation as K
+import imageio
+
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
-from tqdm.notebook import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-import clip
-import kornia.augmentation as K
-import numpy as np
-import imageio
-from PIL import ImageFile, Image
-import stylegan
-from mlp_mixer_pytorch import Mixer
-from clip import simple_tokenizer
-
+from taming.models import cond_transformer, vqgan
 from taming.modules.losses.lpips import LPIPS
 from taming.modules.losses.lpips import normalize_tensor
-import vq as VQ
+import taming.modules 
+
+import clip
+from clip import simple_tokenizer
+from mlp_mixer_pytorch import Mixer
 
 
 from omegaconf import OmegaConf
@@ -199,13 +194,13 @@ def train(config_file):
     config = OmegaConf.load(config_file)
     if not hasattr(config, "folder"):
         config.folder = os.path.dirname(config_file)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     
     if USE_HOROVOD:
         hvd.init()
-        torch.cuda.set_device(hvd.local_rank())
-        print(hvd.local_rank())
+        if device == "cuda":
+            torch.cuda.set_device(hvd.local_rank())
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     lpips = LPIPS()
     lpips.load_from_pretrained()
     lpips = lpips.to(device)
@@ -228,6 +223,7 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     clip_dim = 512
+    clip_size = 224
     vq_channels = 256
     vq_image_size = 16
     noise_dim = config.noise_dim
@@ -261,7 +257,6 @@ def train(config_file):
 
     mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
     std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
-    clip_size = 224
     cutn = config.cutn
     make_cutouts = MakeCutouts(clip_size, cutn=cutn)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
