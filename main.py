@@ -177,8 +177,10 @@ def encode_images(fname, *, root_folder="", out="features.pkl"):
 
 
 def tokenize(paths, out="tokenized.pkl"):
-    texts = [open(f).read().strip() for f in glob(paths)]
-    print(len(texts))
+    if "*" in paths:
+        texts = [open(f).read().strip() for f in glob(paths)]
+    else:
+        texts = [l.strip() for l in open(paths).readlines() if len(l) < 100]
     T = clip.tokenize(texts)
     torch.save(T, out)
 
