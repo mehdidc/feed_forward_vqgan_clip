@@ -1,5 +1,15 @@
-# Based on https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ
-# thanks to the authors
+"""
+Feed forward VQGAN-CLIP model, where the goal is to eliminate the need for optimizing the latent
+space of VQGAN for each input prompt.
+
+- The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks
+to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Eleiber, @Crimeacs, @Abulafia)
+- Thanks to @lucidrains, the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
+- Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
+VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
+- Thanks to @afiaka87, who provided the blog captions dataset for experimentation.
+"""
+
 
 import os
 from clize import run
@@ -221,14 +231,19 @@ def train(config_file):
     channels = 256
     vq_image_size = 16
     noise_dim = config.noise_dim
-    net = Mixer(
-        input_dim=clip_dim+noise_dim, 
-        image_size=vq_image_size, 
-        channels=channels, 
-        patch_size=1, 
-        dim=config.dim, 
-        depth=config.depth, 
-        dropout=config.dropout)
+    model_path = os.path.join(config.folder, "model.th")
+    if os.path.exists(model_path):
+        print("Resuming")
+        net = torch.load(model_path, map_location="cpu")
+    else:
+        net = Mixer(
+            input_dim=clip_dim+noise_dim, 
+            image_size=vq_image_size, 
+            channels=channels, 
+            patch_size=1, 
+            dim=config.dim, 
+            depth=config.depth, 
+            dropout=config.dropout)
     net = net.to(device)
     net.config = config
     # net = VQ.Decoder(ch=256, out_ch=256,num_res_blocks=1, channels=128, resolution=1, z_channels=512+noise_dim, attn_resolutions=[], in_channels=512+noise_dim, ch_mult=(1,2,2,2,2)).to(device)
@@ -273,7 +288,10 @@ def train(config_file):
         sampler = None
         shuffle = True
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=1, sampler=sampler, shuffle=shuffle)
-    NOISE = torch.randn(nb_noise,noise_dim)
+    if hasattr(net, "NOISE"):
+        NOISE = net.NOISE
+    else:
+        NOISE = torch.randn(nb_noise,noise_dim)
     if USE_HOROVOD:
         NOISE = hvd.broadcast(NOISE, root_rank=0)
     net.NOISE = NOISE
