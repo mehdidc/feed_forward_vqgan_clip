@@ -6,11 +6,34 @@ the CLIP generated image features and the CLIP input text features.
 
 # How to install?
 
-- `pip install -r requirements.txt`
+### Download the 16384 Dimension Imagenet VQGAN (f=16)
+
+Links:
+- http://mirror.io.community/blob/vqgan/vqgan_imagenet_f16_16384.ckpt
+- http://mirror.io.community/blob/vqgan/vqgan_imagenet_f16_16384.yaml
+
+### Install dependencies. 
+
+#### conda
+```bash
+conda create -n ff_vqgan_clip_env python=3.8
+conda activate ff_vqgan_clip_env
+# Install pytorch/torchvision - See https://pytorch.org/get-started/locally/ for more info.
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+pip install -r requirements.txt
+```
+#### pip/venv
+```bash
+conda deactivate # Make sure to use your global python3
+python3 -m pip install venv
+python3 -m venv ./ff_vqgan_clip_venv
+source ./ff_vqgan_clip_venv/bin/activate
+$ (ff_vqgan_clip_venv) python -m pip install -r requirementst.txt
+```
 
 # How to use?
 
-- Example usage: `python main.train configs/example.yaml`
+- Example usage: `python main.py train configs/example.yaml`
 
 # Acknowledgment
 
