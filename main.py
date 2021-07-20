@@ -316,11 +316,12 @@ def train(config_file):
         for T, in dataloader:
             T = T.to(device)
             bs = len(T)
-            #bs,clip_dim
             if T.dtype == torch.long:
+                #bs,clip_dim
                 H = perceptor.encode_text(T).float()
             else:
                 H = T.float()
+            #repeat*bs,clip_dim
             H = H.repeat(repeat, 1)
             if noise_dim:
                 inds = np.arange(len(NOISE))
@@ -348,13 +349,15 @@ def train(config_file):
                     elif config.diversity_mode == "all":
                         nb = len(feats)
                         div += ( (feats.view(nb, 1, cc,hh,ww) - feats.view(1, nb, cc,hh,ww)) ** 2).sum(dim=2).mean()
+                    else:
+                        raise ValueError("diversity_mode should be 'between_same_prompts' lr 'all'")
             else:
                 div = torch.Tensor([0.]).to(device)
             #cutn*bs,3,h,w
             x = make_cutouts(xr)
             x = (x-mean)/std
             #cutn*bs,clip_dim
-            embed = perceptor.encode_image(x).float()
+            embed = perceptor.encode_image(x).float() # generated image features
             #cutn*bs,clip_dim
             H = H.repeat(cutn, 1)
             H = H.view(cutn, repeat, bs, clip_dim)
@@ -364,7 +367,8 @@ def train(config_file):
             
             #cutn*bs,clip_dim
             embed = F.normalize(embed, dim=1)
-
+            
+            #dist between prompt features `H` and generated image features `embed`
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
             opt.zero_grad()
 
