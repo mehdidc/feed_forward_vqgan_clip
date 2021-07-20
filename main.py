@@ -358,9 +358,11 @@ def train(config_file):
             #cutn*bs,clip_dim
             embed = F.normalize(embed, dim=1)
 
-            # minimize distance between generated images CLIP features and text prompt features
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
             opt.zero_grad()
+
+            # 1) minimize distance between generated images CLIP features and text prompt features
+            # 2) maximize diversity between generated images with the same prompt
             loss = dists  - config.diversity_coef * div
             loss.backward()
             opt.step()
