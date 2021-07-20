@@ -17,8 +17,6 @@ import math
 from pathlib import Path
 import sys
 import torchvision
-# sys.path.insert(1, 'taming-transformers')
-from base64 import b64encode
 from omegaconf import OmegaConf
 from PIL import Image
 from PIL import ImageFile, Image
@@ -181,11 +179,25 @@ def encode_images(fname, *, root_folder="", out="features.pkl"):
     torch.save(features, out)
 
 
-def tokenize(paths, out="tokenized.pkl"):
+def tokenize(path, out="tokenized.pkl", max_length:int=None):
+    """
+    tokenize and save to a pkl file
+
+    path: str
+        can be either a text file where each line is a text prompt
+        or a glob pattern where each file is a text prompt
+    out: str
+        output pkl file
+    max_length: int
+        this can be used to filter text prompts and retain only
+        ones that are up to `max_length`
+    """
     if "*" in paths:
         texts = [open(f).read().strip() for f in glob(paths)]
     else:
-        texts = [l.strip() for l in open(paths).readlines() if len(l) < 100]
+        texts = [l.strip() for l in open(paths).readlines()]
+        if max_length:
+            texts = [text for text in texts if len(text) <= max_length]
     T = clip.tokenize(texts)
     torch.save(T, out)
 
@@ -205,6 +217,10 @@ def train(config_file):
     lpips.load_from_pretrained()
     lpips = lpips.to(device)
     
+    # path can be the following:
+    # - a path to a text file where each line is a text prompt
+    # - a glob pattern (*) of text files where each file is a text prompt
+    # - a pkl file created using `tokenize`, where each text prompt is already tokenized
     path = config.path
     if path.endswith("pkl"):
         toks = torch.load(path)
@@ -214,20 +230,25 @@ def train(config_file):
     else:
         texts = [t.strip() for t in open(path).readlines()]
         toks = clip.tokenize(texts)
-    print(len(toks))
+    print(f"Number of text prompts:{len(toks)}")
+
     vqgan_config = config.vqgan_config
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model 
     lr = config.lr
     epochs = config.epochs
+
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+
     clip_dim = 512
     clip_size = 224
     vq_channels = 256
     vq_image_size = 16
     noise_dim = config.noise_dim
+    
     model_path = os.path.join(config.folder, "model.th")
+    
     if os.path.exists(model_path):
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
@@ -261,9 +282,7 @@ def train(config_file):
     make_cutouts = MakeCutouts(clip_size, cutn=cutn)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-    L = 1. 
     bs = config.batch_size
-    step = 0
     repeat = config.repeat
     nb_noise = config.nb_noise
     dataset = torch.utils.data.TensorDataset(toks)
@@ -286,6 +305,9 @@ def train(config_file):
         if USE_HOROVOD:
             NOISE = hvd.broadcast(NOISE, root_rank=0)
         net.NOISE = NOISE
+
+    avg_loss = 1. 
+    step = 0
     for e in range(epochs):
         sampler.set_epoch(e)
         for T, in dataloader:
@@ -316,22 +338,9 @@ def train(config_file):
                 div = 0
                 # for feats in [z]:
                 for feats in lpips.net( (xr-mean)/std):
-                # for feats in [inception(xr*2-1)[0]]:
-                    # feats = feats.view(len(feats), -1)
                     feats = normalize_tensor(feats)
-                    # feats = perceptor.encode_image( (xr[:,:,:224,:224]-mean)/std  ).float()
-                    # feats = normalize_tensor(lpips.net( (xr-mean)/std  ).relu4_3.view(bs,-1))
                     _, cc,hh,ww = feats.shape
-                    # feats = xr.view(bs,-1)
-                    # NB = bs * mask.sum()
-                    # diversity loss between all pairs, like <https://arxiv.org/pdf/1703.01664.pdf>
-                    # div +=  ((feats.view(repeat, 1, bs, -1) - feats.view(1, repeat, bs, -1)) ** 2).sum(dim=-1).mean()
                     div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
-                    # div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=(0,1,2)).mean()
-                    # feats = feats.mean(dim=(2,3))
-                    # div += feats.std(dim=0).mean()
-                    # for i,j in combinations(range( len(feats) ), 2):
-                    # div += ((feats[i]-feats[j])**2).sum(dim=0).mean()
             else:
                 div = torch.Tensor([0.]).to(device)
             #cutn*bs,3,h,w
@@ -349,46 +358,60 @@ def train(config_file):
             #cutn*bs,clip_dim
             embed = F.normalize(embed, dim=1)
 
-            #maximize clip score
+            # minimize distance between generated images CLIP features and text prompt features
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
             opt.zero_grad()
-            loss = dists  - config.diversity_coef*div
+            loss = dists  - config.diversity_coef * div
             loss.backward()
             opt.step()
             if rank_zero: 
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
-            L = loss.item() * 0.01 + L * 0.99 
-            if rank_zero and step % 100 == 0:
-                print(e, step, L, loss.item(), dists.item(), div.item())
-                g = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
-                TF.to_pil_image(g).save(os.path.join(config.folder, 'progress.png'))
-                TF.to_pil_image(g).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
-                torch.save(net, os.path.join(config.folder, "model.th"))
+            avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
+            if rank_zero and step % config.log_interval == 0:
+                print(e, step, avg_loss, loss.item(), dists.item(), div.item())
+                grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
+                TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
+                TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
+                torch.save(net, model_path)
                 if T.dtype == torch.long:
+                    text = "\n".join([decode(t.tolist()) for t in T])
                     with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
-                        text = [decode(t.tolist()) for t in T]
-                        fd.write("\n".join(text))
+                        fd.write(text)
+                    with open(os.path.join(config.folder, "progress_{step:010d}.txt"), "w") as fd:
+                        fd.write(text)
             step += 1
 
 
-def test(model_path, text, *, nb=1):
+def test(model_path, text, *, nb_repeats=1):
+    """
+    generated an image or a set of images from a model given a text prompt
+
+    model_path: str
+        path of the model
+    text: str
+        text prompt. several text prompts can be provided
+        by delimiting them using "|"
+    nb_repeats: int
+        number of times the same text prompt is repeated
+        with different noise vectors
+    """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = torch.load(model_path, map_location="cpu").to(device)
     config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    clip_latent_dim = 512
+    clip_dim = 512
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     texts = text.split("|")
     H = perceptor.encode_text(clip.tokenize(texts).to(device)).float()
-    H = H.repeat(nb, 1)
-    noise_dim = net.input_dim - clip_latent_dim
+    H = H.repeat(nb_repeats, 1)
+    noise_dim = net.input_dim - clip_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
             noise = net.NOISE[:nb].to(device)
@@ -396,13 +419,12 @@ def test(model_path, text, *, nb=1):
         else:
             noise = torch.randn(len(H), noise_dim).to(device)
         H = torch.cat((H, noise), dim=1)
-    net.train()
     with torch.no_grad():
         z = net(H)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
         xr = synth(model, z)
-    g = torchvision.utils.make_grid(xr.cpu(), nrow=nb)
-    TF.to_pil_image(g).save('gen.png')
+    grid = torchvision.utils.make_grid(xr.cpu(), nrow=nb_repeats)
+    TF.to_pil_image(grid).save('gen.png')
 
 if __name__ == "__main__":
     run([train, test, tokenize, encode_images])
