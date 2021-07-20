@@ -286,6 +286,9 @@ def train(config_file):
     repeat = config.repeat
     nb_noise = config.nb_noise
     dataset = torch.utils.data.TensorDataset(toks)
+    if not config.diversity_mode:
+        config.diversity_mode = "between_same_prompts"
+
     if USE_HOROVOD:
         sampler = torch.utils.data.DistributedSampler(
             dataset,
@@ -340,7 +343,11 @@ def train(config_file):
                 for feats in lpips.net( (xr-mean)/std):
                     feats = normalize_tensor(feats)
                     _, cc,hh,ww = feats.shape
-                    div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
+                    if config.diversity_mode == "between_same_prompts":
+                        div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
+                    elif config.diversity_mode == "all":
+                        nb = len(feats)
+                        div += ( (feats.view(nb, 1, cc,hh,ww) - feats.view(1, nb, cc,hh,ww)) ** 2).sum(dim=2).mean()
             else:
                 div = torch.Tensor([0.]).to(device)
             #cutn*bs,3,h,w
@@ -423,7 +430,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png"):
     noise_dim = net.input_dim - clip_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
-            noise = net.NOISE[:nb].to(device)
+            noise = net.NOISE[:nb_repeats].to(device)
             print(noise)
         else:
             noise = torch.randn(len(H), noise_dim).to(device)
