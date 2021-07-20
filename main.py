@@ -244,7 +244,7 @@ def train(config_file):
     clip_dim = 512
     clip_size = 224
     vq_channels = 256
-    vq_image_size = 16
+    vq_image_size = config.vq_image_size if config.vq_image_size else 16
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
