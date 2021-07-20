@@ -308,8 +308,8 @@ def train(config_file):
 
     avg_loss = 1. 
     step = 0
-    for e in range(epochs):
-        sampler.set_epoch(e)
+    for epoch in range(epochs):
+        sampler.set_epoch(epoch)
         for T, in dataloader:
             T = T.to(device)
             bs = len(T)
@@ -370,7 +370,7 @@ def train(config_file):
                 log_writer.add_scalar("diversity", div.item(), step)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % config.log_interval == 0:
-                print(e, step, avg_loss, loss.item(), dists.item(), div.item())
+                print(epoch, step, avg_loss, loss.item(), dists.item(), div.item())
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
