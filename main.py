@@ -244,7 +244,7 @@ def train(config_file):
     clip_dim = 512
     clip_size = 224
     vq_channels = 256
-    vq_image_size = config.vq_image_size if config.vq_image_size else 16
+    vq_image_size = config.get("vq_image_size", 16)
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
@@ -264,7 +264,8 @@ def train(config_file):
     net = net.to(device)
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
-    
+    log_interval = config.get("log_interval", 100)
+
     rank_zero =  (USE_HOROVOD and hvd.rank() == 0) or not USE_HOROVOD
     if rank_zero:
         log_writer = SummaryWriter(config.folder)
@@ -286,8 +287,7 @@ def train(config_file):
     repeat = config.repeat
     nb_noise = config.nb_noise
     dataset = torch.utils.data.TensorDataset(toks)
-    if not config.diversity_mode:
-        config.diversity_mode = "between_same_prompts"
+    diversity_mode = config.get("diversity_mode", "between_same_prompts")
 
     if USE_HOROVOD:
         sampler = torch.utils.data.DistributedSampler(
@@ -344,9 +344,9 @@ def train(config_file):
                 for feats in lpips.net( (xr-mean)/std):
                     feats = normalize_tensor(feats)
                     _, cc,hh,ww = feats.shape
-                    if config.diversity_mode == "between_same_prompts":
+                    if diversity_mode == "between_same_prompts":
                         div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
-                    elif config.diversity_mode == "all":
+                    elif diversity_mode == "all":
                         nb = len(feats)
                         div += ( (feats.view(nb, 1, cc,hh,ww) - feats.view(1, nb, cc,hh,ww)) ** 2).sum(dim=2).mean()
                     else:
@@ -382,7 +382,7 @@ def train(config_file):
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
-            if rank_zero and step % config.log_interval == 0:
+            if rank_zero and step % log_interval == 0:
                 print(epoch, step, avg_loss, loss.item(), dists.item(), div.item())
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
@@ -397,7 +397,7 @@ def train(config_file):
             step += 1
 
 
-def test(model_path, text, *, nb_repeats=1, out_path="gen.png"):
+def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -443,7 +443,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png"):
         z = net(H)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
         xr = synth(model, z)
-    grid = torchvision.utils.make_grid(xr.cpu(), nrow=nb_repeats)
+    grid = torchvision.utils.make_grid(xr.cpu(), nrow=images_per_row if images_per_row else nb_repeats)
     TF.to_pil_image(grid).save(out_path)
 
 if __name__ == "__main__":
