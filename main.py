@@ -336,7 +336,7 @@ def train(config_file):
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
-            #bs, 3, h, w
+            #repeat*bs, 3, h, w
             xr = synth(model, z)
             if config.diversity_coef:
                 div = 0
@@ -353,19 +353,19 @@ def train(config_file):
                         raise ValueError("diversity_mode should be 'between_same_prompts' lr 'all'")
             else:
                 div = torch.Tensor([0.]).to(device)
-            #cutn*bs,3,h,w
+            #cutn*repeat*bs,3,h,w
             x = make_cutouts(xr)
             x = (x-mean)/std
-            #cutn*bs,clip_dim
+            #cutn*repeat*bs,clip_dim
             embed = perceptor.encode_image(x).float() # generated image features
-            #cutn*bs,clip_dim
+            #cutn*repeat*bs,clip_dim
             H = H.repeat(cutn, 1)
             H = H.view(cutn, repeat, bs, clip_dim)
             H = F.normalize(H, dim=-1)
-            #cutn*bs,clip_dim
+            #cutn*repeat*bs,clip_dim
             H = H.view(-1, clip_dim)
             
-            #cutn*bs,clip_dim
+            #cutn*repeat*bs,clip_dim
             embed = F.normalize(embed, dim=1)
             
             #dist between prompt features `H` and generated image features `embed`
