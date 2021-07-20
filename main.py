@@ -379,7 +379,7 @@ def train(config_file):
                     text = "\n".join([decode(t.tolist()) for t in T])
                     with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
                         fd.write(text)
-                    with open(os.path.join(config.folder, "progress_{step:010d}.txt"), "w") as fd:
+                    with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
                         fd.write(text)
             step += 1
 
