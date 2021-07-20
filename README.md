@@ -2,7 +2,9 @@ Feed forward VQGAN-CLIP model, where the goal is to eliminate the need for optim
 space of VQGAN for each input prompt. This  is done by training a model that takes as input
 a dataset of text prompts, and returns as an output the VQGAN latent space, which is then
 transformed into an RGB image. The loss function is minimizing the distance between
-the CLIP generated image features and the CLIP input text features.
+the CLIP generated image features and the CLIP input text features. Additionally,
+a diversity loss can be used to make increase the diversity of the generated
+images given the same prompt.
 
 # How to install?
 
@@ -38,8 +40,8 @@ $ (ff_vqgan_clip_venv) python -m pip install -r requirementst.txt
 # Acknowledgment
 
 - The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks
-to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Eleiber, @Crimeacs, @Abulafia)
-- Thanks to @lucidrains, the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
+to all the authors who contributed to the notebook ([@crowsonkb](https://github.com/crowsonkb), [@advadnoun](https://twitter.com/advadnoun), [@Eleiber](https://github.com/Eleiber), [@Crimeacs](https://twitter.com/earthml1), @Abulafia)
+- Thanks to [@lucidrains](https://github.com/lucidrains), the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
 - Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
-- Thanks to @afiaka87, who provided the blog captions dataset for experimentation.
+- Thanks to [@afiaka87](https://github.com/afiaka87), who provided the blog captions dataset for experimentation.
