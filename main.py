@@ -386,18 +386,21 @@ def train(config_file):
             step += 1
 
 
-def test(model_path, text, *, nb_repeats=1):
+def test(model_path, text, *, nb_repeats=1, out_path="gen.png"):
     """
     generated an image or a set of images from a model given a text prompt
 
     model_path: str
         path of the model
     text: str
-        text prompt. several text prompts can be provided
-        by delimiting them using "|"
+        can either be:
+         - a text prompt. several text prompts can be provided  by delimiting them using "|"
+         - a path to a text file .txt, where each line is a text prompt
     nb_repeats: int
         number of times the same text prompt is repeated
         with different noise vectors
+    out_path: str
+        output path
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = torch.load(model_path, map_location="cpu").to(device)
@@ -410,7 +413,11 @@ def test(model_path, text, *, nb_repeats=1):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-    texts = text.split("|")
+
+    if text.endswith(".txt"):
+        texts = [t.strip() for t in open(text).readlines()]
+    else:
+        texts = text.split("|")
     H = perceptor.encode_text(clip.tokenize(texts).to(device)).float()
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.input_dim - clip_dim
@@ -426,7 +433,7 @@ def test(model_path, text, *, nb_repeats=1):
         z = clamp_with_grad(z, z_min.min(), z_max.max())
         xr = synth(model, z)
     grid = torchvision.utils.make_grid(xr.cpu(), nrow=nb_repeats)
-    TF.to_pil_image(grid).save('gen.png')
+    TF.to_pil_image(grid).save(out_path)
 
 if __name__ == "__main__":
     run([train, test, tokenize, encode_images])
