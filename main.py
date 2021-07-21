@@ -133,8 +133,7 @@ class MakeCutouts(nn.Module):
             K.RandomPerspective(0.7,p=0.7),
             K.ColorJitter(hue=0.1, saturation=0.1, p=0.7),
             K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7),
-            
-)
+        )
         self.noise_fac = 0.1
         self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
         self.max_pool = nn.AdaptiveMaxPool2d((self.cut_size, self.cut_size))
@@ -434,8 +433,13 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     noise_dim = net.input_dim - clip_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
-            noise = net.NOISE[:nb_repeats].to(device)
-            print(noise)
+            noise = net.NOISE
+            if len(noise) > len(H):
+                noise = noise[:len(H)]
+            else:
+                inds = np.random.randint(0, len(noise), size=len(H))
+                noise = noise[inds]
+            noise = noise.to(device)
         else:
             noise = torch.randn(len(H), noise_dim).to(device)
         H = torch.cat((H, noise), dim=1)
