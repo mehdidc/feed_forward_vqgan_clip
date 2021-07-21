@@ -1,10 +1,11 @@
 Feed forward VQGAN-CLIP model, where the goal is to eliminate the need for optimizing the latent
 space of VQGAN for each input prompt. This  is done by training a model that takes as input
-a dataset of text prompts, and returns as an output the VQGAN latent space, which is then
-transformed into an RGB image. The loss function is minimizing the distance between
-the CLIP generated image features and the CLIP input text features. Additionally,
-a diversity loss can be used to make increase the diversity of the generated
-images given the same prompt.
+a text prompt, and returns as an output the VQGAN latent space, which is then
+transformed into an RGB image. The model is trained on a dataset of text prompts
+and can be used on unseen text prompts.
+The loss function is minimizing the distance between the CLIP generated image 
+features and the CLIP input text features. Additionally, a diversity loss can be used to make increase 
+the diversity of the generated images given the same prompt.
 
 # How to install?
 
