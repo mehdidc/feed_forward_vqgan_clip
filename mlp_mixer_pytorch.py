@@ -74,15 +74,6 @@ class Mixer(torch.nn.Module):
         self.input_dim = input_dim
         self.mixer = MLPMixer(image_size, channels, patch_size, dim, depth, expansion_factor=expansion_factor, dropout=dropout)
         self.proj = nn.Linear(input_dim, image_size*image_size*channels)
-        # self.proj = nn.Sequential(
-            # nn.Linear(input_dim, 512),
-            # nn.LayerNorm(512),
-            # nn.ReLU(True),
-            # nn.Linear(512, 1024),
-            # nn.LayerNorm(1024),
-            # nn.ReLU(True),
-            # nn.Linear(1024, image_size*image_size*channels),
-        # )
         H = image_size*image_size*channels
         self.final_proj = nn.Linear(dim, channels)
         self.channels = channels
@@ -90,17 +81,11 @@ class Mixer(torch.nn.Module):
     
     def forward(self, x):
         bs = len(x)
+        # y = self.proj2(x).view(bs, self.image_size, self.image_size, self.channels)
         x = self.proj(x)
         x = x.view(bs, self.channels, self.image_size, self.image_size)
         x = self.mixer(x)
         x = self.final_proj(x)
-        x = x.view(bs, self.image_size, self.image_size, self.channels)
+        x = x.view(bs, self.image_size, self.image_size, self.channels) 
         x = x.permute(0,3,1,2,)
         return x
-
-# import torch
-# dim = 128
-# net = Mixer(input_dim=128, image_size=32, channels=3, patch_size=1, dim=dim, depth=8)
-# x = torch.randn(1,128)
-# y = net(x)
-# print(y.shape)
