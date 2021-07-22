@@ -224,10 +224,10 @@ def train(config_file):
         toks = torch.load(path)
     elif "*" in path:
         texts = [open(f).read().strip() for f in glob(path)]
-        toks = clip.tokenize(texts)
+        toks = clip.tokenize(texts, truncate=True)
     else:
         texts = [t.strip() for t in open(path).readlines()]
-        toks = clip.tokenize(texts)
+        toks = clip.tokenize(texts, truncate=True)
     print(f"Number of text prompts:{len(toks)}")
 
     vqgan_config = config.vqgan_config
@@ -448,7 +448,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
         texts = [t.strip() for t in open(text).readlines()]
     else:
         texts = text.split("|")
-    H = perceptor.encode_text(clip.tokenize(texts).to(device)).float()
+    H = perceptor.encode_text(clip.tokenize(texts, truncate=True).to(device)).float()
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.input_dim - clip_dim
     if noise_dim:
