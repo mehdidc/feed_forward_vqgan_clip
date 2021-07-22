@@ -22,8 +22,8 @@ Links:
 conda create -n ff_vqgan_clip_env python=3.8
 conda activate ff_vqgan_clip_env
 # Install pytorch/torchvision - See https://pytorch.org/get-started/locally/ for more info.
-conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
-pip install -r requirements.txt
+(ff_vqgan_clip_env) conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+(ff_vqgan_clip_env) pip install -r requirements.txt
 ```
 #### pip/venv
 ```bash
@@ -34,9 +34,23 @@ source ./ff_vqgan_clip_venv/bin/activate
 $ (ff_vqgan_clip_venv) python -m pip install -r requirements.txt
 ```
 
-# How to use?
+### Install dependencies - `openai/CLIP`
+```bash
+$ (ff_vqgan_clip_venv) git clone git@github.com:openai/CLIP.git
+$ (ff_vqgan_clip_venv) python CLIP/setup.py install
+```
 
+# How to use?
+- Modify `congigs/example.yaml` as needed.  
 - Example usage: `python main.py train configs/example.yaml`
+- Loss will be output for tensorboard.
+
+To run tensorboard:
+```bash
+# in a new terminal/session
+(ff_vqgan_clip_venv) pip install tensorboard
+(ff_vqgan_clip_venv) tensorboard --logdir results
+```
 
 # Acknowledgements
 
