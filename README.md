@@ -38,7 +38,7 @@ $ (ff_vqgan_clip_venv) python -m pip install -r requirementst.txt
 
 - Example usage: `python main.py train configs/example.yaml`
 
-# Acknowledgment
+# Acknowledgements
 
 - The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks
 to all the authors who contributed to the notebook ([@crowsonkb](https://github.com/crowsonkb), [@advadnoun](https://twitter.com/advadnoun), [@Eleiber](https://github.com/Eleiber), [@Crimeacs](https://twitter.com/earthml1), @Abulafia)
@@ -46,3 +46,4 @@ to all the authors who contributed to the notebook ([@crowsonkb](https://github.
 - Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to [@afiaka87](https://github.com/afiaka87), who provided the blog captions dataset for experimentation.
+- Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
