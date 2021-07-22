@@ -8,6 +8,7 @@ to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Ele
 - Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to @afiaka87, who provided the blog captions dataset for experimentation.
+- Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
 """
 import os
 from clize import run
@@ -39,7 +40,7 @@ import taming.modules
 import clip
 from clip import simple_tokenizer
 from mlp_mixer_pytorch import Mixer
-
+from vitgan import Generator as VitGAN
 
 from omegaconf import OmegaConf
 
@@ -206,7 +207,6 @@ def train(config_file):
     if not hasattr(config, "folder"):
         config.folder = os.path.dirname(config_file)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    
     if USE_HOROVOD:
         hvd.init()
         if device == "cuda":
@@ -252,14 +252,28 @@ def train(config_file):
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
     else:
-        net = Mixer(
-            input_dim=clip_dim+noise_dim, 
-            image_size=vq_image_size, 
-            channels=vq_channels, 
-            patch_size=1, 
-            dim=config.dim, 
-            depth=config.depth, 
-            dropout=config.dropout)
+        if config.model_type == "vitgan":
+            net = VitGAN(
+                initialize_size = vq_image_size//8, 
+                dropout = config.dropout, 
+                out_channels=vq_channels,
+                input_dim=clip_dim+noise_dim,
+                dim=config.dim,
+                num_heads=config.get("num_heads", 6),
+                blocks=config.depth,
+            )
+        elif config.model_type == "mlp_mixer":
+            net = Mixer(
+                input_dim=clip_dim+noise_dim, 
+                image_size=vq_image_size, 
+                channels=vq_channels, 
+                patch_size=1, 
+                dim=config.dim, 
+                depth=config.depth, 
+                dropout=config.dropout
+            )
+        else:
+            raise ValueError("model_type should be 'vitgan' or  'mlp_mixer'")
     net = net.to(device)
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
@@ -323,10 +337,13 @@ def train(config_file):
             #repeat*bs,clip_dim
             H = H.repeat(repeat, 1)
             if noise_dim:
-                inds = np.arange(len(NOISE))
-                np.random.shuffle(inds)
-                inds = inds[:repeat]
-                noise = NOISE[inds].to(device).repeat(bs, 1).view(bs,repeat,-1).permute(1,0,2).contiguous().view(bs*repeat,-1)
+                if nb_noise:
+                    inds = np.arange(len(NOISE))
+                    np.random.shuffle(inds)
+                    inds = inds[:repeat]
+                    noise = NOISE[inds].to(device).repeat(bs, 1).view(bs,repeat,-1).permute(1,0,2).contiguous().view(bs*repeat,-1)
+                else:
+                    noise = torch.randn(len(H), noise_dim).to(device)
                 Hi = torch.cat((H,noise),dim=1)
             else:
                 Hi = H
@@ -334,6 +351,7 @@ def train(config_file):
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
+            # print(z.min(),z.max())
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
@@ -341,11 +359,13 @@ def train(config_file):
                 div = 0
                 # for feats in [z]:
                 for feats in lpips.net( (xr-mean)/std):
-                    feats = normalize_tensor(feats)
-                    _, cc,hh,ww = feats.shape
                     if diversity_mode == "between_same_prompts":
+                        feats = normalize_tensor(feats)
+                        _, cc,hh,ww = feats.shape
                         div += ( (feats.view(repeat, 1, bs, cc,hh,ww) - feats.view(1, repeat, bs, cc,hh,ww)) ** 2).sum(dim=3).mean()
                     elif diversity_mode == "all":
+                        feats = normalize_tensor(feats)
+                        _, cc,hh,ww = feats.shape
                         nb = len(feats)
                         div += ( (feats.view(nb, 1, cc,hh,ww) - feats.view(1, nb, cc,hh,ww)) ** 2).sum(dim=2).mean()
                     else:
