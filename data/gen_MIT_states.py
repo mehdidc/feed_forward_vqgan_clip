@@ -1,11 +1,15 @@
 import random
 from itertools import product
+
+def sentence(obj, adj):
+    return f"The {obj} in this picture is {adj}. {obj.capitalize()} is {adj}."
+
 lines = open("MIT_states_raw.txt").readlines()
-adjs = list(set([l.split(" ")[0].strip() for l in lines if len(l.split(" ")) == 2]))
-objs = list(set([l.split(" ")[1].strip() for l in lines if len(l.split(" ")) == 2]))
+adjs = sorted(list(set([l.split(" ")[0].strip() for l in lines if len(l.split(" ")) == 2])))
+objs = sorted(list(set([l.split(" ")[1].strip() for l in lines if len(l.split(" ")) == 2])))
 texts = []
 for adj, obj in product(adjs, objs):
-    text = f"The {obj} in this picture is {adj}. {obj.capitalize()} is {adj}."
+    text = sentence(obj, adj)
     texts.append(text)
 random.seed(42)
 random.shuffle(texts)
