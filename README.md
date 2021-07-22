@@ -31,7 +31,7 @@ conda deactivate # Make sure to use your global python3
 python3 -m pip install venv
 python3 -m venv ./ff_vqgan_clip_venv
 source ./ff_vqgan_clip_venv/bin/activate
-$ (ff_vqgan_clip_venv) python -m pip install -r requirementst.txt
+$ (ff_vqgan_clip_venv) python -m pip install -r requirements.txt
 ```
 
 # How to use?
