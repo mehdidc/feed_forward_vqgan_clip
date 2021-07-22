@@ -35,7 +35,6 @@ from torch.utils.tensorboard import SummaryWriter
 from taming.models import cond_transformer, vqgan
 from taming.modules.losses.lpips import LPIPS
 from taming.modules.losses.lpips import normalize_tensor
-import taming.modules 
 
 import clip
 from clip import simple_tokenizer
@@ -179,7 +178,7 @@ def encode_images(fname, *, root_folder="", out="features.pkl"):
     torch.save(features, out)
 
 
-def tokenize(path, out="tokenized.pkl", max_length:int=None):
+def tokenize(paths, out="tokenized.pkl", max_length:int=None):
     """
     tokenize and save to a pkl file
 
