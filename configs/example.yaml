@@ -11,7 +11,8 @@ nb_noise: null # number of unique noise vectors
 diversity_coef: 0 # diversity loss coeficient
 vqgan_config: "vqgan_imagenet_f16_16384.yaml"
 vqgan_checkpoint: "vqgan_imagenet_f16_16384.ckpt"
-clip_model: "ViT-B/32"
+clip_model: "ViT-B/32" # can be RN50, RN101, RN50x4, RN50x16, ViT-B/16, ViT-B/32
 path: data/MIT_objects_train.txt # data path
 folder: results/example # results path
 log_interval: 100
+model_type: mlp_mixer
