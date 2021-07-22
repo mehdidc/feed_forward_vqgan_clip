@@ -325,7 +325,8 @@ def train(config_file):
     avg_loss = 1. 
     step = 0
     for epoch in range(epochs):
-        sampler.set_epoch(epoch)
+        if USE_HOROVOD:
+            sampler.set_epoch(epoch)
         for T, in dataloader:
             T = T.to(device)
             bs = len(T)
