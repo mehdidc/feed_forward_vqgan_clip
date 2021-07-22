@@ -15,4 +15,4 @@ clip_model: "ViT-B/32" # can be RN50, RN101, RN50x4, RN50x16, ViT-B/16, ViT-B/32
 path: data/MIT_objects_train.txt # data path
 folder: results/example # results path
 log_interval: 100
-model_type: mlp_mixer
+model_type: mlp_mixer # can be mlp_mixer, vitgan
