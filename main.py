@@ -197,7 +197,7 @@ def tokenize(paths, out="tokenized.pkl", max_length:int=None):
         texts = [l.strip() for l in open(paths).readlines()]
         if max_length:
             texts = [text for text in texts if len(text) <= max_length]
-    T = clip.tokenize(texts)
+    T = clip.tokenize(texts, truncate=True)
     torch.save(T, out)
 
 def train(config_file):
