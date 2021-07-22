@@ -41,11 +41,25 @@ $ (ff_vqgan_clip_venv) python CLIP/setup.py install
 ```
 
 # How to use?
-- Modify `congigs/example.yaml` as needed.  
-- Example usage: `python main.py train configs/example.yaml`
-- Loss will be output for tensorboard.
 
-To run tensorboard:
+
+## (Optional) Pre-tokenize Text
+```
+$ (ff_vqgan_clip_venv) python main.py tokenize data/vg_oi_coco_cc6m_blog.txt cembeds 128
+```
+
+## Train
+
+Modify `configs/example.yaml` as needed.  
+
+```
+$ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
+```
+
+
+
+## Tensorboard:
+Loss will be output for tensorboard.
 ```bash
 # in a new terminal/session
 (ff_vqgan_clip_venv) pip install tensorboard
