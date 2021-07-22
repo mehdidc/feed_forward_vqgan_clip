@@ -45,7 +45,7 @@ $ (ff_vqgan_clip_venv) python CLIP/setup.py install
 
 ## (Optional) Pre-tokenize Text
 ```
-$ (ff_vqgan_clip_venv) python main.py tokenize data/vg_oi_coco_cc6m_blog.txt cembeds 128
+$ (ff_vqgan_clip_venv) python main.py tokenize data/list_of_captions.txt cembeds 128
 ```
 
 ## Train
