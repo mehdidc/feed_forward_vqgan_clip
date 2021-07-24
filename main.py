@@ -450,7 +450,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
         texts = text.split("|")
     H = perceptor.encode_text(clip.tokenize(texts, truncate=True).to(device)).float()
     H = H.repeat(nb_repeats, 1)
-    noise_dim = net.input_dim - clip_dim
+    noise_dim = net.config.noise_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
             noise = net.NOISE
