@@ -35,7 +35,6 @@ from torch.utils.tensorboard import SummaryWriter
 from taming.models import cond_transformer, vqgan
 from taming.modules.losses.lpips import LPIPS
 from taming.modules.losses.lpips import normalize_tensor
-import taming.modules 
 
 import clip
 from clip import simple_tokenizer
@@ -179,7 +178,7 @@ def encode_images(fname, *, root_folder="", out="features.pkl"):
     torch.save(features, out)
 
 
-def tokenize(path, out="tokenized.pkl", max_length:int=None):
+def tokenize(paths, out="tokenized.pkl", max_length:int=None):
     """
     tokenize and save to a pkl file
 
@@ -198,7 +197,7 @@ def tokenize(path, out="tokenized.pkl", max_length:int=None):
         texts = [l.strip() for l in open(paths).readlines()]
         if max_length:
             texts = [text for text in texts if len(text) <= max_length]
-    T = clip.tokenize(texts)
+    T = clip.tokenize(texts, truncate=True)
     torch.save(T, out)
 
 def train(config_file):
@@ -225,10 +224,10 @@ def train(config_file):
         toks = torch.load(path)
     elif "*" in path:
         texts = [open(f).read().strip() for f in glob(path)]
-        toks = clip.tokenize(texts)
+        toks = clip.tokenize(texts, truncate=True)
     else:
         texts = [t.strip() for t in open(path).readlines()]
-        toks = clip.tokenize(texts)
+        toks = clip.tokenize(texts, truncate=True)
     print(f"Number of text prompts:{len(toks)}")
 
     vqgan_config = config.vqgan_config
@@ -325,7 +324,8 @@ def train(config_file):
     avg_loss = 1. 
     step = 0
     for epoch in range(epochs):
-        sampler.set_epoch(epoch)
+        if USE_HOROVOD:
+            sampler.set_epoch(epoch)
         for T, in dataloader:
             T = T.to(device)
             bs = len(T)
@@ -448,7 +448,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
         texts = [t.strip() for t in open(text).readlines()]
     else:
         texts = text.split("|")
-    H = perceptor.encode_text(clip.tokenize(texts).to(device)).float()
+    H = perceptor.encode_text(clip.tokenize(texts, truncate=True).to(device)).float()
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.input_dim - clip_dim
     if noise_dim:
