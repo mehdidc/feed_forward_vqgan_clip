@@ -7,7 +7,7 @@ The loss function is minimizing the distance between the CLIP generated image
 features and the CLIP input text features. Additionally, a diversity loss can be used to make increase 
 the diversity of the generated images given the same prompt.
 
-Notebook: [![Open In Colab][colab-badge]][colab-notebook]
+[![Open In Colab][colab-badge]][colab-notebook]
 
 [colab-notebook]: <https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing>
 [colab-badge]: <https://colab.research.google.com/assets/colab-badge.svg>
