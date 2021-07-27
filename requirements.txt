@@ -1,7 +1,9 @@
+clip-anytorch
 clize
 einops
 fsspec
 ftfy
+imageio
 kornia
 numpy
 omegaconf
