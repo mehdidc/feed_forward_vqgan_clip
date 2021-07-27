@@ -53,6 +53,11 @@ except ImportError:
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+CLIP_DIM = 512
+CLIP_SIZE = 224
+CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
+CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
+
 def load_vqgan_model(config_path, checkpoint_path):
     config = OmegaConf.load(config_path)
     if config.model.target == 'taming.models.vqgan.VQModel':
@@ -243,20 +248,7 @@ def train(config_file):
     lpips = LPIPS()
     lpips.load_from_pretrained()
     lpips = lpips.to(device)
-    
-    # path can be the following:
-    # - a path to a text file where each line is a text prompt
-    # - a glob pattern (*) of text files where each file is a text prompt
-    # - a pkl file created using `tokenize`, where each text prompt is already tokenized
-    path = config.path
-    if path.endswith("pkl"):
-        toks = torch.load(path)
-    elif "*" in path:
-        texts = [open(f).read().strip() for f in glob(path)]
-        toks = clip.tokenize(texts, truncate=True)
-    else:
-        texts = [t.strip() for t in open(path).readlines()]
-        toks = clip.tokenize(texts, truncate=True)
+    toks = load_dataset(config.path) 
     print(f"Number of text prompts:{len(toks)}")
 
     vqgan_config = config.vqgan_config
@@ -268,10 +260,10 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
 
-    clip_dim = 512
-    clip_size = 224
-    vq_channels = 256
-    vq_image_size = config.get("vq_image_size", 16)
+    clip_dim = CLIP_DIM
+    clip_size = CLIP_SIZE
+    vq_channels = model.quantize.embedding.weight.shape[1]
+    vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
@@ -318,8 +310,8 @@ def train(config_file):
         hvd.broadcast_parameters(net.state_dict(), root_rank=0)
         hvd.broadcast_optimizer_state(opt, root_rank=0)
 
-    mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
-    std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
+    mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
+    std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     cutn = config.cutn
     make_cutouts = MakeCutouts(clip_size, cutn=cutn, augs=config.get("augs"), pool=config.get("pool", True))
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
@@ -467,17 +459,18 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    clip_dim = 512
+    clip_dim = CLIP_DIm
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-
+    
     if text.endswith(".txt"):
         texts = [t.strip() for t in open(text).readlines()]
     else:
         texts = text.split("|")
-    H = perceptor.encode_text(clip.tokenize(texts, truncate=True).to(device)).float()
+    toks = clip.tokenize(texts, truncate=True)
+    H = perceptor.encode_text(toks.to(device)).float()
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.config.noise_dim
     if noise_dim:
@@ -501,6 +494,47 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
 
 @torch.no_grad()
 def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42):
+    """
+    Evaluate the CLIP score of a model on a dataset of prompts.
+    It also optionally saves the generated images of the prompts.
+
+    model_path: str
+        path to model
+
+    path: dataset path
+        like in train, could be a pkl or a text file or a glob pattern of text files
+
+    batch_size: int
+        mini-batch used for evaluation
+
+    out_folder: str
+        folder where to save the results, default is
+        <model_dir>.
+        what is saved is:
+            - <model_dir>/eval_<dataset_name>.th which contains all the CLIP score of each prompt
+            - <model_dir>/eval_<dataset_name>.txt which contains average CLIP score
+
+    clip_threshold: int
+        threshold for CLIP score used for evaluation
+
+    nb_test: int
+        Number of examples to use for evaluation, can be used
+        to filter the dataset if it is too big
+    
+    save_images: bool
+        whether to save the generated images
+
+    img_folder: str
+        path where to save the images if save_images is True, default is
+        <model_dir>/eval_<dataset_name>_images
+
+    images_per_row: int
+        number of images per row in the grid of images if save_images is True
+
+    seed: int
+        seed used to subsample the prompt dataset
+    
+    """
     name = os.path.basename(path)
     if not out_folder:
         out_folder = os.path.dirname(model_path)
@@ -515,22 +549,16 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    clip_dim = 512
-    clip_size = 224
+    clip_dim = CLIP_DIM
+    clip_size = CLIP_SIZE
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-    mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
-    std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
-    if path.endswith("pkl"):
-        toks = torch.load(path)
-    elif "*" in path:
-        texts = [open(f).read().strip() for f in glob(path)]
-        toks = clip.tokenize(texts, truncate=True)
-    else:
-        texts = [t.strip() for t in open(path).readlines()]
-        toks = clip.tokenize(texts, truncate=True)
+    mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
+    std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
+    
+    toks = load_dataset(path)
     if not batch_size:
         batch_size = config.batch_size
         
@@ -542,7 +570,7 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
         toks = toks[inds]
     print(f"Evaluate on {len(toks)} prompts...")
     dataset = torch.utils.data.TensorDataset(toks)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=1, shuffle=False)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=0, shuffle=False)
     clip_scores_batches = []
     noise_dim = net.config.noise_dim
     logits_scale = perceptor.logit_scale.exp().to(device)
@@ -600,6 +628,20 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
     print(f"CLIP score mean: {mean}. CLIP score std:{std}")
     print(f"Fraction of images with a CLIP score of at least {clip_threshold}: {clip_score_atleast}")
 
+def load_dataset(path):
+    # path can be the following:
+    # - a path to a text file where each line is a text prompt
+    # - a glob pattern (*) of text files where each file is a text prompt
+    # - a pkl file created using `tokenize`, where each text prompt is already tokenized
+    if path.endswith("pkl"):
+        toks = torch.load(path)
+    elif "*" in path:
+        texts = [open(f).read().strip() for f in glob(path)]
+        toks = clip.tokenize(texts, truncate=True)
+    else:
+        texts = [t.strip() for t in open(path).readlines()]
+        toks = clip.tokenize(texts, truncate=True)
+    return toks
 
 if __name__ == "__main__":
     run([train, test, tokenize, encode_images, evaluate])
