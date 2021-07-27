@@ -459,7 +459,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    clip_dim = CLIP_DIm
+    clip_dim = CLIP_DIM
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
@@ -588,8 +588,10 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
                 noise = noise.to(device)
             else:
                 noise = torch.randn(len(H), noise_dim).to(device)
-            H = torch.cat((H, noise), dim=1)
-        z = net(H)
+            Hi = torch.cat((H, noise), dim=1)
+        else:
+            Hi = H
+        z = net(Hi)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
         xr = synth(model, z)
         if save_images:
