@@ -57,6 +57,24 @@ $ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
 ```
 
 
+## Pre-trained models
+
+
+| Name          | Type   | Size    | Dataset                 | Link                                                                                            |
+|---------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|
+| cc12m_8x128   | VitGAN | 12.1MB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1NgbKRJUhFxvkb04AM9E0uRLd_5Hp1dll/view?usp=sharing)  |
+| cc12m_16x256  | VitGAN | 60.1MB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1MvkqHzkeP62Sgoq6Sa52acxdEY2kD-47/view?usp=sharing)  |
+| cc12m_32x512  | VitGAN | 408.4MB | Conceptual captions 12M | [Download](https://drive.google.com/file/d/14QVdFcn2haaESnZduu1Z2D2-_-VIhTQj/view?usp=sharing)  |
+| cc12m_32x1024 | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1GevpgoQ3FPeCEOcd7xUuGFOOhy38hA0i/view?usp=sharing]) |
+
+
+You can also access them from <https://drive.google.com/file/d/1NgbKRJUhFxvkb04AM9E0uRLd_5Hp1dll/view?usp=sharing>
+
+After downloading a model or finishing training your own model, you can test it with new prompts, e.g.,
+
+`python -u main.py test pretrained_models/cc12m_32x1024/model.th "an armchair in the shape of an avocado"`
+
+![](images/avocado_chair.png)
 
 ## Tensorboard:
 Loss will be output for tensorboard.
