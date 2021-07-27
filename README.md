@@ -84,7 +84,7 @@ After downloading a model or finishing training your own model, you can test it 
 ![](images/avocado_chair.png)
 
 You can also try it in the [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing).
-Using the notebook you can generate images from a pre-trained models and do interpolations to create videos, see example [video](https://drive.google.com/file/d/1wA-QsBWA7dV74L-CpL753ITHdbgj2tVg/view?usp=sharing)
+Using the notebook you can generate images from a pre-trained models and do interpolations to create videos, see example [video](https://www.youtube.com/watch?v=8_EHeW5YIpk)
 
 ## Tensorboard:
 Loss will be output for tensorboard.
