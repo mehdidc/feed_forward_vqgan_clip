@@ -7,7 +7,7 @@ to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Ele
 - Thanks to @lucidrains, the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
 - Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
-- Thanks to @afiaka87, who provided the blog captions dataset for experimentation.
+- Thanks to @afiaka87 for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
 """
 import os
@@ -21,6 +21,7 @@ import torchvision
 from omegaconf import OmegaConf
 from PIL import Image
 from PIL import ImageFile, Image
+import json
 import numpy as np
 import kornia.augmentation as K
 import imageio
@@ -116,24 +117,55 @@ def synth(model, z):
     return x
 
 class MakeCutouts(nn.Module):
-    def __init__(self, cut_size, cutn, cut_pow=1.):
+    def __init__(self, cut_size, cutn, cut_pow=1., augs=None, pool=True):
         super().__init__()
         self.cut_size = cut_size
         self.cutn = cutn
         self.cut_pow = cut_pow
+        self.pool = pool
 
-        self.augs = nn.Sequential(
-            # K.RandomHorizontalFlip(p=0.5),
-            # K.RandomVerticalFlip(p=0.5),
-            # K.RandomSolarize(0.01, 0.01, p=0.7),
-            # K.RandomSharpness(0.3,p=0.4),
-            # K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=0.5),
-            # K.RandomCrop(size=(self.cut_size,self.cut_size), p=0.5),
-            K.RandomAffine(degrees=15, translate=0.1, p=0.7, padding_mode='border'),
-            K.RandomPerspective(0.7,p=0.7),
-            K.ColorJitter(hue=0.1, saturation=0.1, p=0.7),
-            K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7),
-        )
+        # Parametrization of the augmentations and new augmentations taken from <https://github.com/nerdyrodent/VQGAN-CLIP>, thanks to @nerdyrodent.
+        if not augs:
+            augs = ('Af', 'Pe', 'Ji', 'Er')
+        # self.augs = nn.Sequential(
+            # # K.RandomHorizontalFlip(p=0.5),
+            # # K.RandomVerticalFlip(p=0.5),
+            # # K.RandomSolarize(0.01, 0.01, p=0.7),
+            # # K.RandomSharpness(0.3,p=0.4),
+            # # K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=0.5),
+            # # K.RandomCrop(size=(self.cut_size,self.cut_size), p=0.5),
+            # K.RandomAffine(degrees=15, translate=0.1, p=0.7, padding_mode='border'),
+            # K.RandomPerspective(0.7,p=0.7),
+            # K.ColorJitter(hue=0.1, saturation=0.1, p=0.7),
+            # K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7),
+        # )
+        augment_list = []
+        for item in augs:
+            if item == 'Ji2':
+                augment_list.append(K.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.05, hue=0.05, p=0.5))
+            elif item == 'Ji':
+                augment_list.append(K.ColorJitter(hue=0.1, saturation=0.1, p=0.7))
+            elif item == 'Sh':
+                augment_list.append(K.RandomSharpness(sharpness=0.4, p=0.7))
+            elif item == 'Gn':
+                augment_list.append(K.RandomGaussianNoise(mean=0.0, std=1., p=0.5))
+            elif item == 'Pe':
+                augment_list.append(K.RandomPerspective(distortion_scale=0.7, p=0.7))
+            elif item == 'Ro':
+                augment_list.append(K.RandomRotation(degrees=15, p=0.7))
+            elif item == 'Af':
+                augment_list.append(K.RandomAffine(degrees=15, translate=0.1, p=0.7, padding_mode='border'))
+            elif item == 'Et':
+                augment_list.append(K.RandomElasticTransform(p=0.7))
+            elif item == 'Ts':
+                augment_list.append(K.RandomThinPlateSpline(scale=0.3, same_on_batch=False, p=0.7))
+            elif item == 'Cr':
+                augment_list.append(K.RandomCrop(size=(self.cut_size,self.cut_size), p=0.5))
+            elif item == 'Er':
+                augment_list.append(K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7))
+            elif item == 'Re':
+                augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
+        self.augs = nn.Sequential(*augment_list)
         self.noise_fac = 0.1
         self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
         self.max_pool = nn.AdaptiveMaxPool2d((self.cut_size, self.cut_size))
@@ -144,19 +176,16 @@ class MakeCutouts(nn.Module):
         min_size = min(sideX, sideY, self.cut_size)
         cutouts = []
         
-        for _ in range(self.cutn):
-
-            # size = int(torch.rand([])**self.cut_pow * (max_size - min_size) + min_size)
-            # offsetx = torch.randint(0, sideX - size + 1, ())
-            # offsety = torch.randint(0, sideY - size + 1, ())
-            # cutout = input[:, :, offsety:offsety + size, offsetx:offsetx + size]
-            # cutouts.append(resample(cutout, (self.cut_size, self.cut_size)))
-
-            # cutout = transforms.Resize(size=(self.cut_size, self.cut_size))(input)
-            
+        if self.pool:
             cutout = (self.av_pool(input) + self.max_pool(input))/2
-            cutouts.append(cutout)
-        batch = self.augs(torch.cat(cutouts, dim=0))
+            batch = cutout.repeat(self.cutn, 1, 1, 1)
+        else:
+            batch = input.repeat(self.cutn, 1, 1, 1)
+        # for _ in range(self.cutn):
+            # cutout = (self.av_pool(input) + self.max_pool(input))/2
+            # cutouts.append(cutout)
+        # batch = torch.cat(cutouts, dim=0)
+        batch = self.augs(batch)
         if self.noise_fac:
             facs = batch.new_empty([len(batch), 1, 1, 1]).uniform_(0, self.noise_fac)
             batch = batch + facs * torch.randn_like(batch)
@@ -292,7 +321,7 @@ def train(config_file):
     mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
     std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
     cutn = config.cutn
-    make_cutouts = MakeCutouts(clip_size, cutn=cutn)
+    make_cutouts = MakeCutouts(clip_size, cutn=cutn, augs=config.get("augs"), pool=config.get("pool", True))
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     bs = config.batch_size
@@ -311,7 +340,7 @@ def train(config_file):
     else:
         sampler = None
         shuffle = True
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=1, sampler=sampler, shuffle=shuffle)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=0, sampler=sampler, shuffle=shuffle)
     if nb_noise:
         if hasattr(net, "NOISE"):
             NOISE = net.NOISE
@@ -470,5 +499,107 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     grid = torchvision.utils.make_grid(xr.cpu(), nrow=images_per_row if images_per_row else nb_repeats)
     TF.to_pil_image(grid).save(out_path)
 
+@torch.no_grad()
+def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42):
+    name = os.path.basename(path)
+    if not out_folder:
+        out_folder = os.path.dirname(model_path)
+        os.makedirs(out_folder, exist_ok=True)
+    if not img_folder:
+        img_folder = os.path.join(os.path.dirname(model_path), f"eval_{name}_images")
+        os.makedirs(img_folder, exist_ok=True)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    net = torch.load(model_path, map_location="cpu").to(device)
+    config = net.config
+    vqgan_config = config.vqgan_config 
+    vqgan_checkpoint = config.vqgan_checkpoint
+    clip_model = config.clip_model
+    clip_dim = 512
+    clip_size = 224
+    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+    z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
+    z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
+    mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(1,-1,1,1).to(device)
+    std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(1,-1,1,1).to(device)
+    if path.endswith("pkl"):
+        toks = torch.load(path)
+    elif "*" in path:
+        texts = [open(f).read().strip() for f in glob(path)]
+        toks = clip.tokenize(texts, truncate=True)
+    else:
+        texts = [t.strip() for t in open(path).readlines()]
+        toks = clip.tokenize(texts, truncate=True)
+    if not batch_size:
+        batch_size = config.batch_size
+        
+    np.random.seed(seed)
+    if nb_test:
+        inds = np.arange(len(toks))
+        np.random.shuffle(inds)
+        inds = inds[:nb_test]
+        toks = toks[inds]
+    print(f"Evaluate on {len(toks)} prompts...")
+    dataset = torch.utils.data.TensorDataset(toks)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=1, shuffle=False)
+    clip_scores_batches = []
+    noise_dim = net.config.noise_dim
+    logits_scale = perceptor.logit_scale.exp().to(device)
+    for batch_idx, (tok,) in enumerate(dataloader):
+        tok = tok.to(device)
+        H = perceptor.encode_text(tok).float()
+        if noise_dim:
+            if hasattr(net, "NOISE"):
+                noise = net.NOISE
+                if len(noise) > len(H):
+                    noise = noise[:len(H)]
+                else:
+                    inds = np.random.randint(0, len(noise), size=len(H))
+                    noise = noise[inds]
+                noise = noise.to(device)
+            else:
+                noise = torch.randn(len(H), noise_dim).to(device)
+            H = torch.cat((H, noise), dim=1)
+        z = net(H)
+        z = clamp_with_grad(z, z_min.min(), z_max.max())
+        xr = synth(model, z)
+        if save_images:
+            grid = torchvision.utils.make_grid(xr.cpu(), nrow=images_per_row)
+            TF.to_pil_image(grid).save(os.path.join(img_folder, f"batch_{batch_idx:010d}.png"))
+            text = "\n".join([decode(t.tolist()) for t in tok])
+            with open(os.path.join(img_folder, f"batch_{batch_idx:010d}.txt"), "w") as fd:
+                fd.write(text)
+        xr = torch.nn.functional.interpolate(xr, size=(clip_size, clip_size), mode='bilinear')
+        xr = (xr - mean) / std
+        embed = perceptor.encode_image(xr).float()
+        image_features = F.normalize(embed, dim=1)
+        text_features = F.normalize(H, dim=1) 
+        clip_scores = (logits_scale * (image_features * text_features).sum(dim=1)).cpu()
+        clip_scores_batches.append(clip_scores)
+    clip_scores = torch.cat(clip_scores_batches)
+
+
+    out = os.path.join(out_folder, f"eval_{name}.th")
+    print(f"Saving to {out}")
+    torch.save(clip_scores, out)
+
+    mean = clip_scores.mean().item()
+    std = clip_scores.std().item()
+    clip_score_atleast = (clip_scores >= clip_threshold).float().mean().item()
+    
+    dump = {
+        "clip_score_mean": mean,
+        "clip_score_std": std,
+        f"clip_score_atleast_{clip_threshold}": clip_score_atleast,
+    }
+    out = os.path.join(out_folder, f"eval_{name}.txt")
+    print(f"Saving to {out}")
+    with open(out, "w") as fd:
+        fd.write(json.dumps(dump))
+    print(f"CLIP score mean: {mean}. CLIP score std:{std}")
+    print(f"Fraction of images with a CLIP score of at least {clip_threshold}: {clip_score_atleast}")
+
+
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images])
+    run([train, test, tokenize, encode_images, evaluate])
