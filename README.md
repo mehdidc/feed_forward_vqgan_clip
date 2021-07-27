@@ -70,6 +70,8 @@ $ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
 
 You can also access them from <https://drive.google.com/drive/folders/10m4LU1C5jRFZvAXvp9aOXeee0HFphI02?usp=sharing>
 
+NB: cc12m_AxB means a model trained on conceptual captions 12M, with depth A and hidden state dimension B
+
 After downloading a model or finishing training your own model, you can test it with new prompts, e.g.,
 
 `python -u main.py test pretrained_models/cc12m_32x1024/model.th "an armchair in the shape of an avocado"`
