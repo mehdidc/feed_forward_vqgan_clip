@@ -437,21 +437,27 @@ def train(config_file):
             step += 1
 
 
-def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
+def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
     """
     generated an image or a set of images from a model given a text prompt
 
     model_path: str
         path of the model
-    text: str
+    
+    text_or_path: str
         can either be:
          - a text prompt. several text prompts can be provided  by delimiting them using "|"
          - a path to a text file .txt, where each line is a text prompt
+    
     nb_repeats: int
         number of times the same text prompt is repeated
         with different noise vectors
+    
     out_path: str
         output path
+    
+    images_per_row: int
+        number of images per row in the grid of images
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = torch.load(model_path, map_location="cpu").to(device)
@@ -465,10 +471,10 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     
-    if text.endswith(".txt"):
-        texts = [t.strip() for t in open(text).readlines()]
+    if text_or_path.endswith(".txt"):
+        texts = [t.strip() for t in open(text_or_path).readlines()]
     else:
-        texts = text.split("|")
+        texts = text_or_path.split("|")
     toks = clip.tokenize(texts, truncate=True)
     H = perceptor.encode_text(toks.to(device)).float()
     H = H.repeat(nb_repeats, 1)
@@ -493,7 +499,7 @@ def test(model_path, text, *, nb_repeats=1, out_path="gen.png", images_per_row:i
     TF.to_pil_image(grid).save(out_path)
 
 @torch.no_grad()
-def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42):
+def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42):
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
     It also optionally saves the generated images of the prompts.
@@ -501,7 +507,7 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
     model_path: str
         path to model
 
-    path: dataset path
+    data_path: dataset path
         like in train, could be a pkl or a text file or a glob pattern of text files
 
     batch_size: int
@@ -558,7 +564,7 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
     mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
     std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     
-    toks = load_dataset(path)
+    toks = load_dataset(data_path)
     if not batch_size:
         batch_size = config.batch_size
         
