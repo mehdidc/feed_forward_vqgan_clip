@@ -512,7 +512,7 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
         <model_dir>.
         what is saved is:
             - <model_dir>/eval_<dataset_name>.th which contains all the CLIP score of each prompt
-            - <model_dir>/eval_<dataset_name>.txt which contains average CLIP score
+            - <model_dir>/eval_<dataset_name>.json which contains average CLIP score
 
     clip_threshold: int
         threshold for CLIP score used for evaluation
@@ -623,7 +623,7 @@ def evaluate(model_path, path, *, batch_size:int=None, out_folder=None, clip_thr
         "clip_score_std": std,
         f"clip_score_atleast_{clip_threshold}": clip_score_atleast,
     }
-    out = os.path.join(out_folder, f"eval_{name}.txt")
+    out = os.path.join(out_folder, f"eval_{name}.json")
     print(f"Saving to {out}")
     with open(out, "w") as fd:
         fd.write(json.dumps(dump))
