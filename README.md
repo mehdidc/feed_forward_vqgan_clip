@@ -74,7 +74,7 @@ $ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
 | cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1GevpgoQ3FPeCEOcd7xUuGFOOhy38hA0i/view?usp=sharing) | @mehdidc |
 | cc12m_64x1024  | VitGAN | 3.05GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/15MdeW9fxYFEAlHRGqF3-Y7jY0lBrowP6/view?usp=sharing) | @mehdidc |
 
-You can also access them from <https://drive.google.com/drive/folders/10m4LU1C5jRFZvAXvp9aOXeee0HFphI02?usp=sharing>
+You can also access them from [here](https://drive.google.com/drive/folders/10m4LU1C5jRFZvAXvp9aOXeee0HFphI02?usp=sharing)
 
 NB: cc12m_AxB means a model trained on conceptual captions 12M, with depth A and hidden state dimension B
 
