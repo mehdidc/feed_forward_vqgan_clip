@@ -72,8 +72,7 @@ $ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
 | cc12m_16x256   | VitGAN | 60.1MB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1MvkqHzkeP62Sgoq6Sa52acxdEY2kD-47/view?usp=sharing)  | @mehdidc |
 | cc12m_32x512   | VitGAN | 408.4MB | Conceptual captions 12M | [Download](https://drive.google.com/file/d/14QVdFcn2haaESnZduu1Z2D2-_-VIhTQj/view?usp=sharing)  | @mehdidc |
 | cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1GevpgoQ3FPeCEOcd7xUuGFOOhy38hA0i/view?usp=sharing) | @mehdidc |
-| cc12m_64x1024  | VitGAN | 3.05GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/15MdeW9fxYFEAlHRGqF3-Y7jY0lBrowP6/view?usp=sharing
-) | @mehdidc |
+| cc12m_64x1024  | VitGAN | 3.05GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/15MdeW9fxYFEAlHRGqF3-Y7jY0lBrowP6/view?usp=sharing) | @mehdidc |
 
 You can also access them from <https://drive.google.com/drive/folders/10m4LU1C5jRFZvAXvp9aOXeee0HFphI02?usp=sharing>
 
