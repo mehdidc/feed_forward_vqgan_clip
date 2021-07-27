@@ -73,5 +73,5 @@ to all the authors who contributed to the notebook ([@crowsonkb](https://github.
 - Thanks to [@lucidrains](https://github.com/lucidrains), the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
 - Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
-- Thanks to [@afiaka87](https://github.com/afiaka87), who provided the blog captions dataset for experimentation.
+- Thanks to @afiaka87 for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
