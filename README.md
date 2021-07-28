@@ -39,12 +39,6 @@ source ./ff_vqgan_clip_venv/bin/activate
 $ (ff_vqgan_clip_venv) python -m pip install -r requirements.txt
 ```
 
-### Install dependencies - `openai/CLIP`
-```bash
-$ (ff_vqgan_clip_venv) git clone git@github.com:openai/CLIP.git
-$ (ff_vqgan_clip_venv) python CLIP/setup.py install
-```
-
 # How to use?
 
 
