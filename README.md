@@ -52,7 +52,7 @@ $ (ff_vqgan_clip_venv) python main.py tokenize data/list_of_captions.txt cembeds
 Modify `configs/example.yaml` as needed.  
 
 ```
-$ (ff_vqgan_clip_venv) python main.py train configs/example.yaml`
+$ (ff_vqgan_clip_venv) python main.py train configs/example.yaml
 ```
 
 ## Tensorboard:
