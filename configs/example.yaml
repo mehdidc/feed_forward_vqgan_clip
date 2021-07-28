@@ -4,7 +4,7 @@ noise_dim: 0 # noise vector to concatenate with input prompt features to add div
 dim: 128 # dim of th hidden state
 depth: 8 # nb of layers
 dropout: 0
-cutn: 8 # number of random data augmentations per generate image
+cutn: 8 # number of random data augmentations per generated image
 batch_size: 8
 repeat: 1 # number of generated images per prompt
 nb_noise: null # number of unique noise vectors
