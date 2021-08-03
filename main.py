@@ -344,6 +344,7 @@ def train(config_file):
 
     avg_loss = 1. 
     step = 0
+    flow = torch.load("../clip_text_to_image_features/model.th", map_location="cpu").to(device)
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -357,6 +358,7 @@ def train(config_file):
                 H = T.float()
             #repeat*bs,clip_dim
             H = H.repeat(repeat, 1)
+            H = flow.sample(H.view(repeat*bs,-1,1,1)).view(repeat*bs,-1)
             if noise_dim:
                 if nb_noise:
                     inds = np.arange(len(NOISE))
