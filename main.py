@@ -260,7 +260,7 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
 
-    clip_dim = CLIP_DIM
+    clip_dim = 128
     clip_size = CLIP_SIZE
     vq_channels = model.quantize.embedding.weight.shape[1]
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
@@ -341,10 +341,15 @@ def train(config_file):
         if USE_HOROVOD:
             NOISE = hvd.broadcast(NOISE, root_rank=0)
         net.NOISE = NOISE
-
+    from pl_bolts.models.self_supervised import SimCLR
     avg_loss = 1. 
     step = 0
     flow = torch.load("../clip_text_to_image_features/model.th", map_location="cpu").to(device)
+    weight_path = 'https://pl-bolts-weights.s3.us-east-2.amazonaws.com/simclr/bolts_simclr_imagenet/simclr_imagenet.ckpt'
+    simclr = SimCLR.load_from_checkpoint(weight_path, strict=False)
+    sim = simclr.encoder
+    sim.eval().to(device)
+    proj = simclr.projection.eval().to(device)
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -399,7 +404,9 @@ def train(config_file):
             x = make_cutouts(xr)
             x = (x-mean)/std
             #cutn*repeat*bs,clip_dim
-            embed = perceptor.encode_image(x).float() # generated image features
+            # embed = perceptor.encode_image(x).float() # generated image features
+
+            embed = proj(sim(x)[0])
             #cutn*repeat*bs,clip_dim
             H = H.repeat(cutn, 1)
             H = H.view(cutn, repeat, bs, clip_dim)
