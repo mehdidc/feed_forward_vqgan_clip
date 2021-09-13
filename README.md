@@ -17,9 +17,8 @@ the diversity of the generated images given the same prompt.
 ### Download the 16384 Dimension Imagenet VQGAN (f=16)
 
 Links:
-- http://mirror.io.community/blob/vqgan/vqgan_imagenet_f16_16384.ckpt
-- http://mirror.io.community/blob/vqgan/vqgan_imagenet_f16_16384.yaml
-
+- https://drive.google.com/file/d/1TrU397dlPW4ROUuam3Af8E-TAtbRz306 (vqgan_imagenet_f16_16384.ckpt)
+- https://drive.google.com/file/d/1-yBthWZojmTOV81D0OUQVVKD_ofP3Ptj  (vqgan_imagenet_f16_16384.yaml)
 ### Install dependencies. 
 
 #### conda
