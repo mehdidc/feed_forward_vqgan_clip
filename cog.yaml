@@ -1,0 +1,36 @@
+build:
+  gpu: true
+  python_version: "3.8"
+  system_packages:
+    - "libgl1-mesa-glx"
+    - "libglib2.0-0"
+  python_packages:
+    - "taming-transformers-rom1504==0.0.6"
+    - "clip-anytorch==2.2.0"
+    - "clize==4.2.0"
+    - "einops==0.3.2"
+    - "ftfy==6.0.3"
+    - "fsspec==2021.8.1"
+    - "imageio==2.9.0"
+    - "kornia==0.5.10"
+    - "torch==1.8.0"
+    - "torchvision==0.9.0"
+    - "numpy==1.21.1"
+    - "ipython==7.21.0"
+    - "omegaconf==2.1.1"
+    - "pandas==1.3.3"
+    - "pytorch-lightning==1.4.7"
+    - "requests==2.26.0"
+    - "tensorboard==2.6.0"
+    - "Pillow==8.3.2"
+    - "torchmetrics==0.5.1"
+
+predict: "predict.py:Predictor"
+
+
+
+
+
+
+
+

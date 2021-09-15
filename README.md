@@ -12,6 +12,8 @@ the diversity of the generated images given the same prompt.
 [colab-notebook]: <https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing>
 [colab-badge]: <https://colab.research.google.com/assets/colab-badge.svg>
 
+[Run it on Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)
+
 # How to install?
 
 ### Download the 16384 Dimension Imagenet VQGAN (f=16)
