@@ -1,9 +1,9 @@
 lr: 0.001 # learning rate
-epochs: 200
+epochs: 200 # total number of epochs
 noise_dim: 0 # noise vector to concatenate with input prompt features to add diversity
 dim: 128 # dim of th hidden state
 depth: 8 # nb of layers
-dropout: 0
+dropout: 0 # dropout rate (between 0 and 1), regularization
 cutn: 8 # number of random data augmentations per generated image
 batch_size: 8
 repeat: 1 # number of generated images per prompt
@@ -16,3 +16,4 @@ path: data/MIT_objects_train.txt # data path
 folder: results/example # results path
 log_interval: 100
 model_type: mlp_mixer # can be mlp_mixer, vitgan
+vq_image_size: 16 # grid size of VQGAN latent space  (16x16 here), determines image size. With default VQGAN, grid size is multipled by 16. Thus, image size here is 16*16=256. Make it bigger to have a bigger generated image size, e.g. for 512x512, `vq_image_size` should be 32.
