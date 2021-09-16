@@ -297,6 +297,10 @@ def train(config_file):
     net = net.to(device)
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
+    opt_path = os.path.join(config.folder, "opt.th")
+    if os.path.exists(opt_path):
+        print(f"Resuming optimizer state from {opt_path}")
+        opt.load_state_dict(torch.load(opt_path))
     log_interval = config.get("log_interval", 100)
 
     rank_zero =  (USE_HOROVOD and hvd.rank() == 0) or not USE_HOROVOD
@@ -428,6 +432,7 @@ def train(config_file):
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
                 torch.save(net, model_path)
+                torch.save(opt.state_dict(), os.path.join(config.folder, "opt.th"))
                 if T.dtype == torch.long:
                     text = "\n".join([decode(t.tolist()) for t in T])
                     with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
