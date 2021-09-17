@@ -196,11 +196,10 @@ class MakeCutouts(nn.Module):
             batch = batch + facs * torch.randn_like(batch)
         return batch
 
-def encode_images(fname, *, root_folder="", out="features.pkl"):
+def encode_images(pattern, *, out="features.pkl"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
-    paths = open(fname).readlines()
-    paths = [root_folder + p.strip() for p in paths]
+    paths = glob(pattern)
     features = []
     for p in paths:
         print(p)
@@ -211,6 +210,49 @@ def encode_images(fname, *, root_folder="", out="features.pkl"):
     features = torch.cat(features)
     torch.save(features, out)
 
+def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl"):
+    """
+    encode (text,image) pairs to CLIP features
+    can be used to train a text to image model.
+
+    folder: str
+        folder with text and images.
+        consist in a set of pairs of files, e.g.,
+            - file1.jpg file1.txt
+            - file2.jpg file2.jpg
+            - ...
+    img_ext: str
+        image extension
+    text_text: str
+        text extension
+
+    out: str
+        output pkl file
+    """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    text_paths = glob(os.path.join(folder, "*."+text_ext))
+    img_paths = [t.replace(text_ext, img_ext) for t in text_paths]
+    
+    text_features_list = []
+    image_features_list = []
+
+    for text_path, img_path in zip(text_paths, img_paths):
+        print(text_path, img_path)
+        text = open(text_path).read()
+        text_toks = clip.tokenize([text], truncate=True).to(device)
+        with torch.no_grad():
+            text_features = model.encode_text(text_toks)
+        text_features_list.append(text_features.cpu())
+
+        image = preprocess(Image.open(img_path)).unsqueeze(0).to(device)
+        with torch.no_grad():
+            image_features = model.encode_image(image)
+        image_features_list.append(image_features.cpu())
+
+    text_features = torch.cat(text_features_list)
+    image_features = torch.cat(image_features_list)
+    torch.save((text_features, image_features), out)
 
 def tokenize(paths, out="tokenized.pkl", max_length:int=None):
     """
@@ -323,7 +365,10 @@ def train(config_file):
     bs = config.batch_size
     repeat = config.repeat
     nb_noise = config.nb_noise
-    dataset = torch.utils.data.TensorDataset(toks)
+    if type(toks) == tuple:
+        dataset = torch.utils.data.TensorDataset(*toks)
+    else:
+        dataset = torch.utils.data.TensorDataset(toks, toks)
     diversity_mode = config.get("diversity_mode", "between_same_prompts")
 
     if USE_HOROVOD:
@@ -351,16 +396,17 @@ def train(config_file):
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
-        for T, in dataloader:
-            T = T.to(device)
-            bs = len(T)
-            if T.dtype == torch.long:
-                #bs,clip_dim
-                H = perceptor.encode_text(T).float()
-            else:
-                H = T.float()
+        for inp, out in dataloader:
+            inp = inp.to(device)
+            out = out.to(device)
+            bs = len(inp)
+            #bs,clip_dim
+            inp_feats = perceptor.encode_text(inp).float() if inp.dtype == torch.long else inp.float()
+            #bs,clip_dim
+            out_feats = perceptor.encode_text(out).float() if out.dtype == torch.long else out.float()
             #repeat*bs,clip_dim
-            H = H.repeat(repeat, 1)
+            inp_feats = inp_feats.repeat(repeat, 1)
+            out_feats = out_feats.repeat(repeat, 1)
             if noise_dim:
                 if nb_noise:
                     inds = np.arange(len(NOISE))
@@ -368,15 +414,12 @@ def train(config_file):
                     inds = inds[:repeat]
                     noise = NOISE[inds].to(device).repeat(bs, 1).view(bs,repeat,-1).permute(1,0,2).contiguous().view(bs*repeat,-1)
                 else:
-                    noise = torch.randn(len(H), noise_dim).to(device)
-                Hi = torch.cat((H,noise),dim=1)
-            else:
-                Hi = H
-            z = net(Hi)
+                    noise = torch.randn(len(inp_feats), noise_dim).to(device)
+                inp_feats = torch.cat((inp_feats,noise),dim=1)
+            z = net(inp_feats)
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
-            # print(z.min(),z.max())
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
@@ -403,7 +446,7 @@ def train(config_file):
             #cutn*repeat*bs,clip_dim
             embed = perceptor.encode_image(x).float() # generated image features
             #cutn*repeat*bs,clip_dim
-            H = H.repeat(cutn, 1)
+            H = out_feats.repeat(cutn, 1)
             H = H.view(cutn, repeat, bs, clip_dim)
             H = F.normalize(H, dim=-1)
             #cutn*repeat*bs,clip_dim
@@ -433,8 +476,8 @@ def train(config_file):
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
                 torch.save(net, model_path)
                 torch.save(opt.state_dict(), os.path.join(config.folder, "opt.th"))
-                if T.dtype == torch.long:
-                    text = "\n".join([decode(t.tolist()) for t in T])
+                if inp.dtype == torch.long:
+                    text = "\n".join([decode(t.tolist()) for t in inp])
                     with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
                         fd.write(text)
                     with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
@@ -645,7 +688,7 @@ def load_dataset(path):
     # path can be the following:
     # - a path to a text file where each line is a text prompt
     # - a glob pattern (*) of text files where each file is a text prompt
-    # - a pkl file created using `tokenize`, where each text prompt is already tokenized
+    # - a pkl file created using `tokenize` or `encode_images` or `encode_text_and_images`
     if path.endswith("pkl"):
         toks = torch.load(path)
     elif "*" in path:
@@ -657,4 +700,4 @@ def load_dataset(path):
     return toks
 
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images, evaluate])
+    run([train, test, tokenize, encode_images, encode_text_and_images, evaluate])
