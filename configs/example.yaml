@@ -12,7 +12,13 @@ diversity_coef: 0 # diversity loss coeficient
 vqgan_config: "vqgan_imagenet_f16_16384.yaml"
 vqgan_checkpoint: "vqgan_imagenet_f16_16384.ckpt"
 clip_model: "ViT-B/32" # can be RN50, RN101, RN50x4, RN50x16, ViT-B/16, ViT-B/32
-path: data/MIT_objects_train.txt # data path
+
+# In general,  path can be the following:
+# - a path to a text file where each line is a text prompt
+# - a glob pattern (*) of text files where each file is a text prompt
+# - a pkl file created using `tokenize` or `encode_images` or `encode_text_and_images` (see `main.py`)
+path: data/MIT_objects_train.txt
+
 folder: results/example # results path
 log_interval: 100
 model_type: mlp_mixer # can be mlp_mixer, vitgan
