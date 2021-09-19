@@ -589,7 +589,7 @@ def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, cli
         seed used to subsample the prompt dataset
     
     """
-    name = os.path.basename(path)
+    name = os.path.basename(data_path)
     if not out_folder:
         out_folder = os.path.dirname(model_path)
         os.makedirs(out_folder, exist_ok=True)
