@@ -525,8 +525,15 @@ def train(config_file):
                     caption_fixed_batch = [decode(t.tolist()) for t in inp_fixed_batch] if inp_fixed_batch.dtype == torch.long else None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
-                    log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
-                    log["image_fixed"] = wandb.Image(xr_fixed_batch[0].cpu(), caption=caption_fixed_batch[0] if caption_fixed_batch else None)
+                    log["image"] = [
+                        wandb.Image(xr[r, i].cpu(), caption=caption[i] if caption else None)
+                        for r in range(repeat)
+                        for i in range(bs)
+                    ]
+                    log["image_fixed"] = [
+                        wandb.Image(xr_fixed_batch[i].cpu(), caption=caption_fixed_batch[i] if caption_fixed_batch else None)
+                        for i in range(len(xr_fixed_batch))
+                    ]
                     wandb.log(log)
                     model_artifact = wandb.Artifact('trained-model', type='model', metadata=dict(net.config))
                     model_artifact.add_file(model_path)
