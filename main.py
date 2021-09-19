@@ -49,7 +49,7 @@ try:
     USE_HOROVOD = True
 except ImportError:
     USE_HOROVOD = False
-USE_HOROVOD = False
+
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -284,7 +284,7 @@ def train(config_file):
     use_wandb = config.get("use_wandb", False)
     if use_wandb:
         import wandb
-        wandb.init(
+        wandb_run = wandb.init(
             project=config.get("wandb_project", "feed_forward_vqgan_clip"),
             entity=config.get("wandb_entity"),
             resume=False,
@@ -314,6 +314,7 @@ def train(config_file):
     clip_dim = CLIP_DIM
     clip_size = CLIP_SIZE
     vq_channels = model.quantize.embedding.weight.shape[1]
+
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
     noise_dim = config.noise_dim
     
@@ -500,6 +501,9 @@ def train(config_file):
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
                     wandb.log(log)
+                    model_artifact = wandb.Artifact('trained-model', type='model', metadata=dict(net.config))
+                    model_artifact.add_file(model_path)
+                    wandb_run.log_artifact(model_artifact)
             step += 1
 
 
