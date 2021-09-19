@@ -500,7 +500,7 @@ def train(config_file):
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
                     wandb.log(log)
-                step += 1
+            step += 1
 
 
 def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
