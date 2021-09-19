@@ -49,6 +49,8 @@ try:
     USE_HOROVOD = True
 except ImportError:
     USE_HOROVOD = False
+if os.getenv("USE_HOROVOD") == "false":
+    USE_HOROVOD = False
 
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -392,6 +394,7 @@ def train(config_file):
         sampler = None
         shuffle = True
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=bs, num_workers=0, sampler=sampler, shuffle=shuffle)
+    first_batch = next(iter(dataloader))
     if nb_noise:
         if hasattr(net, "NOISE"):
             NOISE = net.NOISE
@@ -486,20 +489,44 @@ def train(config_file):
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
                 torch.save(net, model_path)
                 torch.save(opt.state_dict(), os.path.join(config.folder, "opt.th"))
+                
+
                 if inp.dtype == torch.long:
                     text = "\n".join([decode(t.tolist()) for t in inp])
                     with open(os.path.join(config.folder, "progress.txt"), "w") as fd:
                         fd.write(text)
                     with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
                         fd.write(text)
+                
+                inp_fixed_batch, _ = first_batch
+                inp_fixed_batch = inp_fixed_batch.to(device)
+                with torch.no_grad():
+                    inp_feats = perceptor.encode_text(inp_fixed_batch).float() if inp_fixed_batch.dtype == torch.long else inp_fixed_batch.float()
+                    if noise_dim:
+                        inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
+                    z = net(inp_feats)
+                    #bs, vq_channels, vq_image_size, vq_image_size
+                    z = z.contiguous()
+                    z = z.view(bs, vq_channels, vq_image_size, vq_image_size)
+                    z = clamp_with_grad(z, z_min.min(), z_max.max())
+                    #repeat*bs, 3, h, w
+                    xr_fixed_batch = synth(model, z)
+                grid = torchvision.utils.make_grid(xr_fixed_batch.cpu(), nrow=bs)
+                TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress_fixed_batch.png'))
+                TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_fixed_batch_{step:010d}.png'))
+                if step == 0 and inp_fixed_batch.dtype == torch.long:
+                    text = "\n".join([decode(t.tolist()) for t in inp_fixed_batch])
+                    with open(os.path.join(config.folder, "fixed_batch.txt"), "w") as fd:
+                        fd.write(text)
+
                 if use_wandb:
-                    if inp.dtype == torch.long:
-                        caption = [decode(t.tolist()) for t in inp]
-                    else:
-                        caption = None
+                    
+                    caption = [decode(t.tolist()) for t in inp] if inp.dtype == torch.long else None
+                    caption_fixed_batch = [decode(t.tolist()) for t in inp_fixed_batch] if inp_fixed_batch.dtype == torch.long else None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
+                    log["image_fixed"] = wandb.Image(xr_fixed_batch[0].cpu(), caption=caption_fixed_batch[0] if caption_fixed_batch else None)
                     wandb.log(log)
                     model_artifact = wandb.Artifact('trained-model', type='model', metadata=dict(net.config))
                     model_artifact.add_file(model_path)
