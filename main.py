@@ -477,8 +477,6 @@ def train(config_file):
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
-                if use_wandb:
-                    wandb.log({"loss": loss.item(), "dists": dists.item(), "diversity": div.item()})
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}")
@@ -499,7 +497,7 @@ def train(config_file):
                     else:
                         caption = None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
-                    log = {}
+                    log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
                     wandb.log(log)
                 step += 1
