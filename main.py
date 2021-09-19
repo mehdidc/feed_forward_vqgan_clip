@@ -281,6 +281,15 @@ def train(config_file):
     config = OmegaConf.load(config_file)
     if not hasattr(config, "folder"):
         config.folder = os.path.dirname(config_file)
+    use_wandb = config.get("use_wandb", False)
+    if use_wandb:
+        import wandb
+        wandb.init(
+            project=config.get("wandb_project", "feed_forward_vqgan_clip"),
+            entity=config.get("wandb_entity"),
+            resume=False,
+            config=config,
+        )
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if USE_HOROVOD:
         hvd.init()
@@ -468,6 +477,8 @@ def train(config_file):
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
+                if use_wandb:
+                    wandb.log({"loss": loss.item(), "dists": dists.item(), "diversity": div.item()})
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}")
@@ -482,7 +493,16 @@ def train(config_file):
                         fd.write(text)
                     with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
                         fd.write(text)
-            step += 1
+                if use_wandb:
+                    if inp.dtype == torch.long:
+                        caption = [decode(t.tolist()) for t in inp]
+                    else:
+                        caption = None
+                    xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
+                    log = {}
+                    log["image"] = wandb.Image(xr[0, 0].cpu(), caption=caption[0] if caption else None)
+                    wandb.log(log)
+                step += 1
 
 
 def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
