@@ -292,6 +292,7 @@ def train(config_file):
             resume=False,
             config=config,
         )
+        wandb_log_interval = config.get("wandb_log_interval", 1)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if USE_HOROVOD:
         hvd.init()
@@ -481,7 +482,7 @@ def train(config_file):
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
-                if use_wandb:
+                if use_wandb and step % wandb_log_interval == 0:
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
