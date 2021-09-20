@@ -481,6 +481,9 @@ def train(config_file):
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
+                if use_wandb:
+                    log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
+                    wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}")
@@ -524,7 +527,7 @@ def train(config_file):
                     caption = [decode(t.tolist()) for t in inp] if inp.dtype == torch.long else None
                     caption_fixed_batch = [decode(t.tolist()) for t in inp_fixed_batch] if inp_fixed_batch.dtype == torch.long else None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
-                    log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
+                    log = {}
                     log["image"] = [
                         wandb.Image(xr[r, i].cpu(), caption=caption[i] if caption else None)
                         for r in range(repeat)
@@ -603,7 +606,7 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     TF.to_pil_image(grid).save(out_path)
 
 @torch.no_grad()
-def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42):
+def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42, clip_model="ViT-B/32"):
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
     It also optionally saves the generated images of the prompts.
@@ -658,7 +661,6 @@ def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, cli
     config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
-    clip_model = config.clip_model
     clip_dim = CLIP_DIM
     clip_size = CLIP_SIZE
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
