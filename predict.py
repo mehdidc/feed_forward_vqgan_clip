@@ -32,7 +32,7 @@ class Predictor(cog.Predictor):
 
     @cog.input("prompt", type=str, help="prompt for generating image")
     @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS, help="Model version")
-    def predict(self, prompt):
+    def predict(self, prompt, model=DEFAULT_MODEL):
         net = self.nets[model]
         toks = clip.tokenize([prompt], truncate=True)
         H = self.perceptor.encode_text(toks.to(self.device)).float()
