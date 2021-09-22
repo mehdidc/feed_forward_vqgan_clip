@@ -475,7 +475,7 @@ def train(config_file):
 
             # 1) minimize distance between generated images CLIP features and text prompt features
             # 2) maximize diversity of the generated images
-            loss = dists  - config.diversity_coef * div
+            loss = dists  - config.diversity_coef * div 
             loss.backward()
             opt.step()
             if rank_zero: 

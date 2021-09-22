@@ -14,6 +14,13 @@ the diversity of the generated images given the same prompt.
 
 [Run it on Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)
 
+# News
+
+- **09-22-2021** 
+    - New models released (see 0.2 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
+    - New [Colab notebook](https://colab.research.google.com/drive/1QYg1J4i5gurhofkvwMNrlMibMOjnjU5I?usp=sharing) for training from scratch or fine-tuning
+    - [Web interface](https://replicate.ai/mehdidc/feed_forward_vqgan_clip) to use the models using [Replicate AI](https://replicate.ai/home) 
+
 # How to install?
 
 ### Download the 16384 Dimension Imagenet VQGAN (f=16)
@@ -68,26 +75,35 @@ Loss will be output for tensorboard.
 
 ## Pre-trained models
 
+### version 0.2 (last)
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
-| cc12m_8x128    | VitGAN | 12.1MB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1NgbKRJUhFxvkb04AM9E0uRLd_5Hp1dll/view?usp=sharing)  | @mehdidc |
-| cc12m_16x256   | VitGAN | 60.1MB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1MvkqHzkeP62Sgoq6Sa52acxdEY2kD-47/view?usp=sharing)  | @mehdidc |
-| cc12m_32x512   | VitGAN | 408.4MB | Conceptual captions 12M | [Download](https://drive.google.com/file/d/14QVdFcn2haaESnZduu1Z2D2-_-VIhTQj/view?usp=sharing)  | @mehdidc |
-| cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/1GevpgoQ3FPeCEOcd7xUuGFOOhy38hA0i/view?usp=sharing) | @mehdidc |
-| cc12m_64x1024  | VitGAN | 3.05GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/15MdeW9fxYFEAlHRGqF3-Y7jY0lBrowP6/view?usp=sharing) | @mehdidc |
-| bcaptmod_8x128 | VitGAN | 11.2MB  | Modified blog captions  | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/files/6878366/model.th.zip)       | @afiaka87|
-| bcapt_16x128    | MLPMixer | 168.8MB  | Blog captions  | [Download](https://drive.google.com/file/d/1u7PqkoYjAcs63vdCKAR5eEyLcsTX6W3I/view?usp=sharing)       | @mehdidc|
-
-You can also access them from [here](https://drive.google.com/drive/folders/10m4LU1C5jRFZvAXvp9aOXeee0HFphI02?usp=sharing)
-
-NB: cc12m_AxB means a model trained on conceptual captions 12M, with depth A and hidden state dimension B
+| cc12m_8x128    | MLPMixer | 12.1MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_8x128_mlp_mixer.th)  | @mehdidc |
+| cc12m_32x1024  | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_mlp_mixer.th) | @mehdidc |
+| cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th) | @mehdidc |
 
 After downloading a model or finishing training your own model, you can test it with new prompts, e.g.,
 
-`python -u main.py test pretrained_models/cc12m_32x1024/model.th "an armchair in the shape of an avocado"`
+- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th`
+- `python -u main.py test cc12m_32x1024_vitgan.th "Picture of a futuristic snowy city during the night, the tree is lit with a lantern"`
 
-![](images/avocado_chair.png)
+![](images/snowy_city.png)
+
+### version 0.1
+
+| Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
+|----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
+| cc12m_8x128    | VitGAN | 12.1MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/cc12m_8x128.th)  | @mehdidc |
+| cc12m_16x256   | VitGAN | 60.1MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/cc12m_16x256.th)  | @mehdidc |
+| cc12m_32x512   | VitGAN | 408.4MB | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/cc12m_32x512.th)  | @mehdidc |
+| cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/cc12m_32x1024.th) | @mehdidc |
+| cc12m_64x1024  | VitGAN | 3.05GB  | Conceptual captions 12M | [Download](https://drive.google.com/file/d/15MdeW9fxYFEAlHRGqF3-Y7jY0lBrowP6/view?usp=sharing) | @mehdidc |
+| bcaptmod_8x128 | VitGAN | 11.2MB  | Modified blog captions  | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/files/6878366/model.th.zip)       | @afiaka87|
+| bcapt_16x128    | MLPMixer | 168.8MB  | Blog captions  | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/bcapt_16x128.th)       | @mehdidc|
+
+NB: cc12m_AxB means a model trained on conceptual captions 12M, with depth A and hidden state dimension B
+
 
 You can also try it in the [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing).
 Using the notebook you can generate images from pre-trained models and do interpolations between text prompts to create videos, see for instance [video 1](https://www.youtube.com/watch?v=8_EHeW5YIpk) or [video 2](https://www.youtube.com/watch?v=sl3gCli2R7g) or [video 3](https://www.youtube.com/watch?v=8dSiv96_2Vc)
@@ -101,3 +117,4 @@ to all the authors who contributed to the notebook ([@crowsonkb](https://github.
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to [@afiaka87](https://github.com/afiaka87) for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
+- Thanks to [@CJWBW](https://github.com/CJWBW) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
