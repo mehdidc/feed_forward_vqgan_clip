@@ -8,20 +8,20 @@ import torchvision
 from main import load_vqgan_model, CLIP_DIM, clamp_with_grad, synth
 
 MODELS = [
-    "cc12m_32x1024_vitgan_v0.1.th"
-    "cc12m_32x1024_vitgan_v0.2.th"
-    "cc12m_32x1024_mlp_mixer_v0.2.th"
+    "cc12m_32x1024_vitgan_v0.1.th",
+    "cc12m_32x1024_vitgan_v0.2.th",
+    "cc12m_32x1024_mlp_mixer_v0.2.th",
 ]
-DEFAULT = "cc12m_32x1024_vitgan_v0.2.th"
+DEFAULT_MODEL = "cc12m_32x1024_vitgan_v0.2.th"
 
 class Predictor(cog.Predictor):
     def setup(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.nets = {
-            torch.load(model_path, map_location="cpu").to(self.device)
-            for model in MODELS
+            model_path: torch.load(model_path, map_location="cpu").to(self.device)
+            for model_path in MODELS
         }
-        config = self.net.config
+        config = self.nets[DEFAULT_MODEL].config
         vqgan_config = config.vqgan_config
         vqgan_checkpoint = config.vqgan_checkpoint
         clip_model = config.clip_model
