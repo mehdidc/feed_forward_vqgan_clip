@@ -19,7 +19,7 @@ the diversity of the generated images given the same prompt.
 - **09-22-2021** 
     - New models released (see 0.2 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
     - New [Colab notebook](https://colab.research.google.com/drive/1QYg1J4i5gurhofkvwMNrlMibMOjnjU5I?usp=sharing) for training from scratch or fine-tuning
-    - [Web interface](https://replicate.ai/mehdidc/feed_forward_vqgan_clip) to use the models using [Replicate AI](https://replicate.ai/home) 
+    - [Web interface](https://replicate.ai/mehdidc/feed_forward_vqgan_clip) from [Replicate AI](https://replicate.ai/home)  to use the models
 
 # How to install?
 
