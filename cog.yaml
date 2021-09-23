@@ -8,7 +8,7 @@ build:
     - "taming-transformers-rom1504==0.0.6"
     - "clip-anytorch==2.2.0"
     - "clize==4.2.0"
-    - "einops==0.3.2"
+    - "einops==0.3.0"
     - "ftfy==6.0.3"
     - "fsspec==2021.8.1"
     - "imageio==2.9.0"
