@@ -275,8 +275,14 @@ def tokenize(paths, out="tokenized.pkl", max_length:int=None):
         texts = [l.strip() for l in open(paths).readlines()]
         if max_length:
             texts = [text for text in texts if len(text) <= max_length]
-    T = clip.tokenize(texts, truncate=True)
-    torch.save(T, out)
+    if batch_size is None:
+        batch_size = len(texts)
+    toks = []
+    for i in range(0, len(texts), batch_size):
+        T = clip.tokenize(texts[i:i+batch_size], truncate=True)
+        toks.append(T)
+    toks = torch.cat(toks)
+    torch.save(toks, out)
 
 def train(config_file):
 
