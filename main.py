@@ -55,8 +55,22 @@ if os.getenv("USE_HOROVOD") == "false":
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-CLIP_DIM = 512
-CLIP_SIZE = 224
+CLIP_SIZE = {
+    "RN50": 224,
+    "RN101": 224,
+    "RN50x4": 288,
+    "RN50x16": 384,
+    "ViT-B/32": 224,
+    "ViT-B/16": 224,
+}
+CLIP_DIM = {
+    "RN50": 1024,
+    "RN101": 512,
+    "RN50x4": 640,
+    "RN50x16": 768,
+    "ViT-B/32": 512,
+    "ViT-B/16": 512,
+}
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
@@ -212,7 +226,7 @@ def encode_images(pattern, *, out="features.pkl"):
     features = torch.cat(features)
     torch.save(features, out)
 
-def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl"):
+def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", clip_model="ViT-B/32"):
     """
     encode (text,image) pairs to CLIP features
     can be used to train a text to image model.
@@ -232,7 +246,7 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
         output pkl file
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    model, preprocess = clip.load(clip_model, device=device, jit=False)
     text_paths = glob(os.path.join(folder, "*."+text_ext))
     img_paths = [t.replace(text_ext, img_ext) for t in text_paths]
     
@@ -255,6 +269,80 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
     text_features = torch.cat(text_features_list)
     image_features = torch.cat(image_features_list)
     torch.save((text_features, image_features), out)
+
+def encode_webdataset(pattern, *, clip_model="ViT-B/32", batch_size=512, img_col="input.jpg", txt_col="output.txt", out="features.pkl"):
+    import webdataset as wds
+    from PIL import Image
+    from io import BytesIO
+    if USE_HOROVOD:
+        hvd.init()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda" and USE_HOROVOD:
+        torch.cuda.set_device(hvd.local_rank())
+    model, preprocess = clip.load(clip_model, device=device, jit=False)
+    def transform_image(x):
+        return preprocess(x)
+    def transform_text(x):
+        return x
+    def filter_dataset(item):
+        try:
+            x = Image.open(BytesIO(item[img_col]))
+        except Exception:
+            return False
+        else:
+            return True
+    tars = glob(pattern)
+    tars = sorted(tars)
+    if USE_HOROVOD:
+        tars = [t for i,t in enumerate(tars) if i % hvd.size() == hvd.rank()]
+    ds = wds.WebDataset(tars, handler=wds.warn_and_continue)
+    ds = ds.select(filter_dataset)
+    ds = ds.decode("pil")
+    ds = ds.to_tuple(img_col, txt_col)
+    ds = ds.map_tuple(transform_image, transform_text)
+    ds = ds.batched(batch_size)
+    dl = wds.WebLoader(ds, batch_size=None, shuffle=False, num_workers=32)
+    imf = []
+    txf = []
+    nb = 0
+    for X, Y in dl:
+        Y = clip.tokenize(Y, truncate=True)
+        X = X.to(device)
+        Y = Y.to(device)
+        with torch.no_grad():
+            image_features = model.encode_image(X).cpu()
+            text_features = model.encode_text(Y).cpu()
+        imf.append(image_features)
+        txf.append(text_features)
+        nb += len(X)
+    if USE_HOROVOD:
+        nb = torch.Tensor([nb]).long()
+        nb = hvd.allreduce(nb, average=False)
+        nb = nb.item()
+    print("Nb of images processed:", nb)
+    imf = torch.cat(imf)
+    txf = torch.cat(txf)
+    if USE_HOROVOD:
+        idx = hvd.rank()
+        torch.save((txf,imf), f"{out}_{idx}")
+        hvd.join()
+        if hvd.rank() == 0:
+            xs = []
+            ys = []
+            paths = [f"{out}_{idx}" for idx in range(hvd.size())]
+            for path in paths:
+                x, y = torch.load(path)
+                xs.append(x)
+                ys.append(y)
+            xs = torch.cat(xs)
+            ys = torch.cat(ys)
+            torch.save((xs,ys), out)
+            for path in paths:
+                os.remove(path)
+        hvd.join()
+    else:
+        torch.save((txf,imf), out)
+
 
 def tokenize(paths, out="tokenized.pkl", max_length:int=None):
     """
@@ -290,6 +378,7 @@ def train(config_file):
     if not hasattr(config, "folder"):
         config.folder = os.path.dirname(config_file)
     use_wandb = config.get("use_wandb", False)
+    use_ema = config.get("use_ema", False)
     if use_wandb:
         import wandb
         wandb_run = wandb.init(
@@ -299,6 +388,10 @@ def train(config_file):
             config=config,
         )
         wandb_log_interval = config.get("wandb_log_interval", 1)
+    if use_ema:
+        from torch_ema import ExponentialMovingAverage
+        ema_decay = config.get("ema_decay", 0.995)
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if USE_HOROVOD:
         hvd.init()
@@ -319,9 +412,8 @@ def train(config_file):
 
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
-
-    clip_dim = CLIP_DIM
-    clip_size = CLIP_SIZE
+    clip_size = CLIP_SIZE[clip_model]
+    clip_dim = CLIP_DIM[clip_model]
     vq_channels = model.quantize.embedding.weight.shape[1]
 
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
@@ -362,6 +454,15 @@ def train(config_file):
     if os.path.exists(opt_path):
         print(f"Resuming optimizer state from {opt_path}")
         opt.load_state_dict(torch.load(opt_path))
+    if use_ema:
+        model_ema_path = os.path.join(config.folder, "model_ema.th")
+        if os.path.exists(model_ema_path):
+            model_ema = torch.load(model_ema, map_location="cpu")
+            ema = ExponentialMovingAverage(model_ema.parameters(), decay=ema_decay)
+        else:
+            ema = ExponentialMovingAverage(net.parameters(), decay=ema_decay)
+        ema.to(device)
+
     log_interval = config.get("log_interval", 100)
 
     rank_zero =  (USE_HOROVOD and hvd.rank() == 0) or not USE_HOROVOD
@@ -410,7 +511,8 @@ def train(config_file):
         if USE_HOROVOD:
             NOISE = hvd.broadcast(NOISE, root_rank=0)
         net.NOISE = NOISE
-
+    input_loss = config.get("input_loss", False)
+    input_loss_coef = config.get("input_loss_coef", 1)
     avg_loss = 1. 
     step = 0
     for epoch in range(epochs):
@@ -477,6 +579,13 @@ def train(config_file):
             
             #dist between prompt features `H` and generated image features `embed`
             dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
+            if input_loss:
+                H = inp_feats.repeat(cutn, 1)
+                H = H.view(cutn, repeat, bs, clip_dim)
+                H = F.normalize(H, dim=-1)
+                #cutn*repeat*bs,clip_dim
+                H = H.view(-1, clip_dim)
+                dists += input_loss_coef * ((H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean())
             opt.zero_grad()
 
             # 1) minimize distance between generated images CLIP features and text prompt features
@@ -484,6 +593,8 @@ def train(config_file):
             loss = dists  - config.diversity_coef * div 
             loss.backward()
             opt.step()
+            if rank_zero and use_ema:
+                ema.update()
             if rank_zero: 
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
@@ -498,8 +609,10 @@ def train(config_file):
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
                 torch.save(net, model_path)
+                if use_ema:
+                    with ema.average_parameters():
+                        torch.save(net, os.path.join(config.folder, "model_ema.th"))
                 torch.save(opt.state_dict(), os.path.join(config.folder, "opt.th"))
-                
 
                 if inp.dtype == torch.long:
                     text = "\n".join([decode(t.tolist()) for t in inp])
@@ -514,7 +627,11 @@ def train(config_file):
                     inp_feats = perceptor.encode_text(inp_fixed_batch).float() if inp_fixed_batch.dtype == torch.long else inp_fixed_batch.float()
                     if noise_dim:
                         inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
-                    z = net(inp_feats)
+                    if use_ema:
+                        with ema.average_parameters():
+                            z = net(inp_feats)
+                    else:
+                        z = net(inp_feats)
                     #bs, vq_channels, vq_image_size, vq_image_size
                     z = z.contiguous()
                     z = z.view(bs, vq_channels, vq_image_size, vq_image_size)
@@ -522,15 +639,14 @@ def train(config_file):
                     #repeat*bs, 3, h, w
                     xr_fixed_batch = synth(model, z)
                 grid = torchvision.utils.make_grid(xr_fixed_batch.cpu(), nrow=bs)
-                TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress_fixed_batch.png'))
-                TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_fixed_batch_{step:010d}.png'))
+                TF.to_pil_image(grid).save(os.path.join(config.folder, 'fixed_batch_progress.png'))
+                TF.to_pil_image(grid).save(os.path.join(config.folder, f'fixed_batch_progress_{step:010d}.png'))
                 if step == 0 and inp_fixed_batch.dtype == torch.long:
                     text = "\n".join([decode(t.tolist()) for t in inp_fixed_batch])
                     with open(os.path.join(config.folder, "fixed_batch.txt"), "w") as fd:
                         fd.write(text)
 
                 if use_wandb:
-                    
                     caption = [decode(t.tolist()) for t in inp] if inp.dtype == torch.long else None
                     caption_fixed_batch = [decode(t.tolist()) for t in inp_fixed_batch] if inp_fixed_batch.dtype == torch.long else None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
@@ -579,7 +695,6 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    clip_dim = CLIP_DIM
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
@@ -613,7 +728,19 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     TF.to_pil_image(grid).save(out_path)
 
 @torch.no_grad()
-def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, clip_threshold=40, nb_test:int=None, save_images=False, img_folder=None, images_per_row=8, seed=42, clip_model="ViT-B/32"):
+def evaluate(
+    model_path, 
+    data_path, *, 
+    batch_size:int=None, 
+    out_folder=None, 
+    clip_threshold=40, 
+    nb_test:int=None, 
+    save_images=False, 
+    img_folder=None, 
+    images_per_row=8, 
+    seed=42, 
+    clip_model="ViT-B/32"
+):
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
     It also optionally saves the generated images of the prompts.
@@ -668,8 +795,7 @@ def evaluate(model_path, data_path, *, batch_size:int=None, out_folder=None, cli
     config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
-    clip_dim = CLIP_DIM
-    clip_size = CLIP_SIZE
+    clip_size = CLIP_SIZE[clip_model]
     perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
@@ -765,4 +891,4 @@ def load_dataset(path):
     return toks
 
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images, encode_text_and_images, evaluate])
+    run([train, test, tokenize, encode_images, encode_text_and_images, encode_webdataset, evaluate])
