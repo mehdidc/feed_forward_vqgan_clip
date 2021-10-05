@@ -457,7 +457,7 @@ def train(config_file):
     if use_ema:
         model_ema_path = os.path.join(config.folder, "model_ema.th")
         if os.path.exists(model_ema_path):
-            model_ema = torch.load(model_ema, map_location="cpu")
+            model_ema = torch.load(model_ema_path, map_location="cpu")
             ema = ExponentialMovingAverage(model_ema.parameters(), decay=ema_decay)
         else:
             ema = ExponentialMovingAverage(net.parameters(), decay=ema_decay)
@@ -782,7 +782,7 @@ def evaluate(
         seed used to subsample the prompt dataset
     
     """
-    name = os.path.basename(data_path)
+    name = os.path.basename(data_path) + "_" + clip_model.replace("/", "_")
     if not out_folder:
         out_folder = os.path.dirname(model_path)
         os.makedirs(out_folder, exist_ok=True)
