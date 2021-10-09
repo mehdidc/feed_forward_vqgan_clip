@@ -32,6 +32,7 @@ from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as TF
 from torch.utils.tensorboard import SummaryWriter
+from torch.nn.utils import clip_grad_norm_
 
 from taming.models import cond_transformer, vqgan
 from taming.modules.losses.lpips import LPIPS
@@ -41,6 +42,7 @@ import clip
 from clip import simple_tokenizer
 from mlp_mixer_pytorch import Mixer
 from vitgan import Generator as VitGAN
+from transformer import XTransformer
 
 from omegaconf import OmegaConf
 
@@ -445,19 +447,28 @@ def train(config_file):
                 depth=config.depth, 
                 dropout=config.dropout
             )
+        elif config.model_type == "xtransformer":
+            net = XTransformer(
+                input_dim=clip_dim+noise_dim, 
+                image_size=vq_image_size, 
+                channels=vq_channels, 
+                dim=config.dim, 
+                depth=config.depth, 
+                heads=config.get("num_heads", 6),
+            )
         else:
-            raise ValueError("model_type should be 'vitgan' or  'mlp_mixer'")
+            raise ValueError("model_type should be 'vitgan' or  'mlp_mixer' or 'xtransformer'")
     net = net.to(device)
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
     opt_path = os.path.join(config.folder, "opt.th")
     if os.path.exists(opt_path):
         print(f"Resuming optimizer state from {opt_path}")
-        opt.load_state_dict(torch.load(opt_path))
+        opt.load_state_dict(torch.load(opt_path, map_location="cpu"))
     if use_ema:
         model_ema_path = os.path.join(config.folder, "model_ema.th")
         if os.path.exists(model_ema_path):
-            model_ema = torch.load(model_ema_path, map_location="cpu")
+            model_ema = torch.load(model_ema_path, map_location="cpu").to(device)
             ema = ExponentialMovingAverage(model_ema.parameters(), decay=ema_decay)
         else:
             ema = ExponentialMovingAverage(net.parameters(), decay=ema_decay)
@@ -513,6 +524,7 @@ def train(config_file):
         net.NOISE = NOISE
     input_loss = config.get("input_loss", False)
     input_loss_coef = config.get("input_loss_coef", 1)
+    clip_grad_norm = config.get("clip_grad_norm")
     avg_loss = 1. 
     step = 0
     for epoch in range(epochs):
@@ -592,6 +604,8 @@ def train(config_file):
             # 2) maximize diversity of the generated images
             loss = dists  - config.diversity_coef * div 
             loss.backward()
+            if clip_grad_norm:
+                clip_grad_norm_(net.parameters(), clip_grad_norm)
             opt.step()
             if rank_zero and use_ema:
                 ema.update()
