@@ -827,9 +827,12 @@ def evaluate(
     clip_scores_batches = []
     noise_dim = net.config.noise_dim
     logits_scale = perceptor.logit_scale.exp().to(device)
+    normalize_input = config.get("normalize_input", False)
     for batch_idx, (tok,) in enumerate(dataloader):
         tok = tok.to(device)
         H = perceptor.encode_text(tok).float()
+        if normalize_input:
+            H = F.normalize(H, dim=1)
         if noise_dim:
             if hasattr(net, "NOISE"):
                 noise = net.NOISE
