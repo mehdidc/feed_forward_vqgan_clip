@@ -515,6 +515,7 @@ def train(config_file):
     input_loss_coef = config.get("input_loss_coef", 1)
     avg_loss = 1. 
     step = 0
+    normalize_input = config.get("normalize_input", False)
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -524,6 +525,8 @@ def train(config_file):
             bs = len(inp)
             #bs,clip_dim
             inp_feats = perceptor.encode_text(inp).float() if inp.dtype == torch.long else inp.float()
+            if normalize_input:
+                inp_feats = F.normalize(inp_feats, dim=1)
             #bs,clip_dim
             out_feats = perceptor.encode_text(out).float() if out.dtype == torch.long else out.float()
             #repeat*bs,clip_dim
@@ -625,6 +628,8 @@ def train(config_file):
                 inp_fixed_batch = inp_fixed_batch.to(device)
                 with torch.no_grad():
                     inp_feats = perceptor.encode_text(inp_fixed_batch).float() if inp_fixed_batch.dtype == torch.long else inp_fixed_batch.float()
+                    if normalize_input:
+                        inp_feats = F.normalize(inp_feats, dim=1)
                     if noise_dim:
                         inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
                     if use_ema:
@@ -704,8 +709,11 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         texts = [t.strip() for t in open(text_or_path).readlines()]
     else:
         texts = text_or_path.split("|")
+    normalize_input = config.get("normalize_input", False)
     toks = clip.tokenize(texts, truncate=True)
     H = perceptor.encode_text(toks.to(device)).float()
+    if normalize_input:
+        H = F.normalize(H, dim=1)
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.config.noise_dim
     if noise_dim:
