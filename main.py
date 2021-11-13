@@ -41,7 +41,7 @@ import clip
 from clip import simple_tokenizer
 from mlp_mixer_pytorch import Mixer
 from vitgan import Generator as VitGAN
-
+from cloob import CLOOB
 from omegaconf import OmegaConf
 
 try:
@@ -61,7 +61,8 @@ CLIP_SIZE = {
     "RN50x4": 288,
     "RN50x16": 384,
     "ViT-B/32": 224,
-    "ViT-B/16": 224,
+    "cloob_rn50": 224,
+    "cloob_rn50x4": 288,
 }
 CLIP_DIM = {
     "RN50": 1024,
@@ -70,6 +71,8 @@ CLIP_DIM = {
     "RN50x16": 768,
     "ViT-B/32": 512,
     "ViT-B/16": 512,
+    "cloob_rn50": 1024,
+    "cloob_rn50x4": 640,
 }
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
@@ -411,7 +414,12 @@ def train(config_file):
     epochs = config.epochs
 
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    if "cloob" in clip_model:
+        # CLOOB
+        perceptor = CLOOB(path=config.clip_model_path).eval().requires_grad_(False).to(device)
+    else:
+        # CLIP
+        perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
     clip_size = CLIP_SIZE[clip_model]
     clip_dim = CLIP_DIM[clip_model]
     vq_channels = model.quantize.embedding.weight.shape[1]
