@@ -414,12 +414,8 @@ def train(config_file):
     epochs = config.epochs
 
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-    if "cloob" in clip_model:
-        # CLOOB
-        perceptor = CLOOB(path=config.clip_model_path).eval().requires_grad_(False).to(device)
-    else:
-        # CLIP
-        perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
     clip_size = CLIP_SIZE[clip_model]
     clip_dim = CLIP_DIM[clip_model]
     vq_channels = model.quantize.embedding.weight.shape[1]
@@ -708,7 +704,8 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -812,7 +809,8 @@ def evaluate(
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -908,6 +906,16 @@ def load_dataset(path):
         texts = [t.strip() for t in open(path).readlines()]
         toks = clip.tokenize(texts, truncate=True)
     return toks
+
+def load_clip_model(model_type, path=None):
+    if "cloob" in model_type:
+        # CLOOB
+        perceptor = CLOOB(path=path).eval().requires_grad_(False)
+    else:
+        # CLIP
+        perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False)
+    return perceptor
+
 
 if __name__ == "__main__":
     run([train, test, tokenize, encode_images, encode_text_and_images, encode_webdataset, evaluate])
