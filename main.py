@@ -455,6 +455,7 @@ def train(config_file):
                 dim=config.dim, 
                 depth=config.depth, 
                 heads=config.get("num_heads", 6),
+                initial_proj=config.get("initial_proj", True),
             )
         else:
             raise ValueError("model_type should be 'vitgan' or  'mlp_mixer' or 'xtransformer'")
