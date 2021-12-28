@@ -44,13 +44,14 @@ from vitgan import Generator as VitGAN
 from cloob import CLOOB
 from omegaconf import OmegaConf
 
-try:
-    import horovod.torch as hvd
-    USE_HOROVOD = True
-except ImportError:
-    USE_HOROVOD = False
 if os.getenv("USE_HOROVOD") == "false":
     USE_HOROVOD = False
+else:
+    try:
+        import horovod.torch as hvd
+        USE_HOROVOD = True
+    except ImportError:
+        USE_HOROVOD = False
 
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -87,6 +88,7 @@ def load_vqgan_model(config_path, checkpoint_path):
         model = vqgan.GumbelVQ(**config.model.params)
         model.eval().requires_grad_(False)
         model.init_from_ckpt(checkpoint_path)
+        model.quantize.embedding = model.quantize.embed
     elif config.model.target == 'taming.models.cond_transformer.Net2NetTransformer':
         parent_model = cond_transformer.Net2NetTransformer(**config.model.params)
         parent_model.eval().requires_grad_(False)
@@ -913,7 +915,7 @@ def load_clip_model(model_type, path=None):
         perceptor = CLOOB(path=path).eval().requires_grad_(False)
     else:
         # CLIP
-        perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False)
+        perceptor = clip.load(model_type, jit=False)[0].eval().requires_grad_(False)
     return perceptor
 
 

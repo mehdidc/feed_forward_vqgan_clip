@@ -1,3 +1,4 @@
+# Code adapted from https://github.com/ml-jku/cloob, thanks to the authors
 import os
 import json
 import torch.nn as nn
@@ -617,15 +618,52 @@ def build_model(state_dict: dict):
     model.load_state_dict(state_dict)
     return model.eval()
 
+models_info = {
+    "RN50": {
+        "embed_dim": 1024,
+        "image_resolution": 224,
+        "vision_layers": [
+            3,
+            4,
+            6,
+            3
+        ],
+        "vision_width": 64,
+        "vision_patch_size": None,
+        "context_length": 77,
+        "vocab_size": 49408,
+        "transformer_width": 512,
+        "transformer_heads": 8,
+        "transformer_layers": 12
+    },
+    "RN50x4": {
+        "embed_dim": 640,
+        "image_resolution": 288,
+        "vision_layers": [
+            4,
+            6,
+            10,
+            6
+        ],
+        "vision_width": 80,
+        "vision_patch_size": None,
+        "context_length": 77,
+        "vocab_size": 49408,
+        "transformer_width": 640,
+        "transformer_heads": 10,
+        "transformer_layers": 12
+    }
+}
 
 class CLOOB(nn.Module):
     def __init__(self, path="cloob_rn50_yfcc_epoch_28.pt", resize=False):
         super().__init__()
         checkpoint = torch.load(path, map_location='cpu')
-        model_config_file = os.path.join("modules", "cloob", "training", "model_configs", checkpoint['model_config_file'])
+        # model_config_file = os.path.join("modules", "cloob", "training", "model_configs", checkpoint['model_config_file'])
         method = checkpoint['method']
-        with open(model_config_file, 'r') as f:
-            model_info = json.load(f)
+        # with open(model_config_file, 'r') as f:
+            # model_info = json.load(f)
+        model_info = models_info[checkpoint['model_config_file'].replace('.json', '')]
         model_info['method'] = method
         model = CLIPGeneral(**model_info)
         sd = checkpoint["state_dict"]
