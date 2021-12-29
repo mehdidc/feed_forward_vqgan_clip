@@ -191,6 +191,8 @@ class MakeCutouts(nn.Module):
                 augment_list.append(K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7))
             elif item == 'Re':
                 augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
+            elif item == 'Re2':
+                augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.9,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
         self.augs = nn.Sequential(*augment_list)
         self.noise_fac = 0.1
         self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
@@ -418,8 +420,8 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
     percetor = perceptor.to(device)
-    clip_size = CLIP_SIZE[clip_model]
-    clip_dim = CLIP_DIM[clip_model]
+    clip_size = config.get("clip_size", CLIP_SIZE[clip_model])
+    clip_dim = config.get("clip_dim", CLIP_DIM[clip_model])
     vq_channels = model.quantize.embedding.weight.shape[1]
 
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
