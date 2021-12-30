@@ -43,16 +43,17 @@ from clip import simple_tokenizer
 from mlp_mixer_pytorch import Mixer
 from vitgan import Generator as VitGAN
 from transformer import XTransformer
-
+from cloob import CLOOB
 from omegaconf import OmegaConf
 
-try:
-    import horovod.torch as hvd
-    USE_HOROVOD = True
-except ImportError:
-    USE_HOROVOD = False
 if os.getenv("USE_HOROVOD") == "false":
     USE_HOROVOD = False
+else:
+    try:
+        import horovod.torch as hvd
+        USE_HOROVOD = True
+    except ImportError:
+        USE_HOROVOD = False
 
 decode = simple_tokenizer.SimpleTokenizer().decode
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -63,7 +64,8 @@ CLIP_SIZE = {
     "RN50x4": 288,
     "RN50x16": 384,
     "ViT-B/32": 224,
-    "ViT-B/16": 224,
+    "cloob_rn50": 224,
+    "cloob_rn50x4": 288,
 }
 CLIP_DIM = {
     "RN50": 1024,
@@ -72,6 +74,8 @@ CLIP_DIM = {
     "RN50x16": 768,
     "ViT-B/32": 512,
     "ViT-B/16": 512,
+    "cloob_rn50": 1024,
+    "cloob_rn50x4": 640,
 }
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
@@ -86,6 +90,7 @@ def load_vqgan_model(config_path, checkpoint_path):
         model = vqgan.GumbelVQ(**config.model.params)
         model.eval().requires_grad_(False)
         model.init_from_ckpt(checkpoint_path)
+        model.quantize.embedding = model.quantize.embed
     elif config.model.target == 'taming.models.cond_transformer.Net2NetTransformer':
         parent_model = cond_transformer.Net2NetTransformer(**config.model.params)
         parent_model.eval().requires_grad_(False)
@@ -188,6 +193,8 @@ class MakeCutouts(nn.Module):
                 augment_list.append(K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7))
             elif item == 'Re':
                 augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
+            elif item == 'Re2':
+                augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.9,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
         self.augs = nn.Sequential(*augment_list)
         self.noise_fac = 0.1
         self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
@@ -413,9 +420,10 @@ def train(config_file):
     epochs = config.epochs
 
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
-    clip_size = CLIP_SIZE[clip_model]
-    clip_dim = CLIP_DIM[clip_model]
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
+    clip_size = config.get("clip_size", CLIP_SIZE[clip_model])
+    clip_dim = config.get("clip_dim", CLIP_DIM[clip_model])
     vq_channels = model.quantize.embedding.weight.shape[1]
 
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
@@ -528,6 +536,7 @@ def train(config_file):
     clip_grad_norm = config.get("clip_grad_norm")
     avg_loss = 1. 
     step = 0
+    normalize_input = config.get("normalize_input", False)
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -537,6 +546,8 @@ def train(config_file):
             bs = len(inp)
             #bs,clip_dim
             inp_feats = perceptor.encode_text(inp).float() if inp.dtype == torch.long else inp.float()
+            if normalize_input:
+                inp_feats = F.normalize(inp_feats, dim=1)
             #bs,clip_dim
             out_feats = perceptor.encode_text(out).float() if out.dtype == torch.long else out.float()
             #repeat*bs,clip_dim
@@ -640,6 +651,8 @@ def train(config_file):
                 inp_fixed_batch = inp_fixed_batch.to(device)
                 with torch.no_grad():
                     inp_feats = perceptor.encode_text(inp_fixed_batch).float() if inp_fixed_batch.dtype == torch.long else inp_fixed_batch.float()
+                    if normalize_input:
+                        inp_feats = F.normalize(inp_feats, dim=1)
                     if noise_dim:
                         inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
                     if use_ema:
@@ -710,7 +723,8 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -719,8 +733,11 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         texts = [t.strip() for t in open(text_or_path).readlines()]
     else:
         texts = text_or_path.split("|")
+    normalize_input = config.get("normalize_input", False)
     toks = clip.tokenize(texts, truncate=True)
     H = perceptor.encode_text(toks.to(device)).float()
+    if normalize_input:
+        H = F.normalize(H, dim=1)
     H = H.repeat(nb_repeats, 1)
     noise_dim = net.config.noise_dim
     if noise_dim:
@@ -811,7 +828,8 @@ def evaluate(
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
-    perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(device)
+    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    percetor = perceptor.to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -834,9 +852,12 @@ def evaluate(
     clip_scores_batches = []
     noise_dim = net.config.noise_dim
     logits_scale = perceptor.logit_scale.exp().to(device)
+    normalize_input = config.get("normalize_input", False)
     for batch_idx, (tok,) in enumerate(dataloader):
         tok = tok.to(device)
         H = perceptor.encode_text(tok).float()
+        if normalize_input:
+            H = F.normalize(H, dim=1)
         if noise_dim:
             if hasattr(net, "NOISE"):
                 noise = net.NOISE
@@ -904,6 +925,16 @@ def load_dataset(path):
         texts = [t.strip() for t in open(path).readlines()]
         toks = clip.tokenize(texts, truncate=True)
     return toks
+
+def load_clip_model(model_type, path=None):
+    if "cloob" in model_type:
+        # CLOOB
+        perceptor = CLOOB(path=path).eval().requires_grad_(False)
+    else:
+        # CLIP
+        perceptor = clip.load(model_type, jit=False)[0].eval().requires_grad_(False)
+    return perceptor
+
 
 if __name__ == "__main__":
     run([train, test, tokenize, encode_images, encode_text_and_images, encode_webdataset, evaluate])

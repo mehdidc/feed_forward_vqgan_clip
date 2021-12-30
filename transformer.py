@@ -26,7 +26,7 @@ class XTransformer(nn.Module):
     
     def forward(self, x):
         bs = len(x)
-        if self.initial_proj:
+        if hasattr(self, "proj"):
             x = self.proj(x)
             x = x.view(bs, self.image_size*self.image_size, self.dim)
         else:
