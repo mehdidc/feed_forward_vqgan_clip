@@ -18,4 +18,4 @@ torchaudio
 torchmetrics
 torchvision
 torchtext
-x-transformers
+x-transformers==0.19.1

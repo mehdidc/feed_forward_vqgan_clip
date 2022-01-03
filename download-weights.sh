@@ -5,3 +5,6 @@ wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/vq
 wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.1/cc12m_32x1024.th --output-document=cc12m_32x1024_vitgan_v0.1.th
 wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th --output-document=cc12m_32x1024_vitgan_v0.2.th
 wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_mlp_mixer.th --output-document=cc12m_32x1024_mlp_mixer_v0.2.th
+wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th
+wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th
+wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th
