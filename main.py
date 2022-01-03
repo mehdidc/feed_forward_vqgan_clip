@@ -221,9 +221,10 @@ class MakeCutouts(nn.Module):
             batch = batch + facs * torch.randn_like(batch)
         return batch
 
-def encode_images(pattern, *, out="features.pkl"):
+def encode_images(pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="features.pkl"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    model = load_clip_model(clip_model, path=clip_path)
     paths = glob(pattern)
     features = []
     for p in paths:
@@ -235,7 +236,7 @@ def encode_images(pattern, *, out="features.pkl"):
     features = torch.cat(features)
     torch.save(features, out)
 
-def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", clip_model="ViT-B/32"):
+def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", clip_model="ViT-B/32", clip_path:str=None):
     """
     encode (text,image) pairs to CLIP features
     can be used to train a text to image model.
@@ -255,7 +256,9 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
         output pkl file
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, preprocess = clip.load(clip_model, device=device, jit=False)
+    _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    model = load_clip_model(clip_model, path=clip_path)
+
     text_paths = glob(os.path.join(folder, "*."+text_ext))
     img_paths = [t.replace(text_ext, img_ext) for t in text_paths]
     
@@ -263,7 +266,6 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
     image_features_list = []
 
     for text_path, img_path in zip(text_paths, img_paths):
-        print(text_path, img_path)
         text = open(text_path).read()
         text_toks = clip.tokenize([text], truncate=True).to(device)
         with torch.no_grad():
@@ -279,7 +281,13 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
     image_features = torch.cat(image_features_list)
     torch.save((text_features, image_features), out)
 
-def encode_webdataset(pattern, *, clip_model="ViT-B/32", batch_size=512, img_col="input.jpg", txt_col="output.txt", out="features.pkl"):
+def encode_text_and_images_webdataset(
+    pattern, *, 
+    clip_model="ViT-B/32", clip_path:str=None, 
+    batch_size=512, 
+    img_col="input.jpg", txt_col="output.txt", 
+    out="features.pkl"
+):
     import webdataset as wds
     from PIL import Image
     from io import BytesIO
@@ -288,7 +296,8 @@ def encode_webdataset(pattern, *, clip_model="ViT-B/32", batch_size=512, img_col
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cuda" and USE_HOROVOD:
         torch.cuda.set_device(hvd.local_rank())
-    model, preprocess = clip.load(clip_model, device=device, jit=False)
+    _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    model = load_clip_model(clip_model, path=clip_path).eval().to(device)
     def transform_image(x):
         return preprocess(x)
     def transform_text(x):
@@ -944,4 +953,4 @@ def load_clip_model(model_type, path=None):
 
 
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images, encode_text_and_images, encode_webdataset, evaluate])
+    run([train, test, tokenize, encode_images, encode_text_and_images, encode_text_and_images_webdataset, evaluate])

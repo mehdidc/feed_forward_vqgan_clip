@@ -13,8 +13,9 @@ pytorch-lightning
 requests
 taming-transformers-rom1504
 tensorboard
-torch==1.9.0
+torch
 torchaudio
 torchmetrics
 torchvision
+torchtext
 x-transformers
