@@ -813,8 +813,13 @@ def evaluate(
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
-    perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
+    
+    perceptor = load_clip_model(clip_model)
     percetor = perceptor.to(device)
+
+    encoder = load_clip_model(config.clip_model, path=config.get("clip_model_path"))
+    encoder = encoder.to(device)
+
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -840,7 +845,7 @@ def evaluate(
     normalize_input = config.get("normalize_input", False)
     for batch_idx, (tok,) in enumerate(dataloader):
         tok = tok.to(device)
-        H = perceptor.encode_text(tok).float()
+        H = encoder.encode_text(tok).float()
         if normalize_input:
             H = F.normalize(H, dim=1)
         if noise_dim:
@@ -870,7 +875,9 @@ def evaluate(
         xr = (xr - mean) / std
         embed = perceptor.encode_image(xr).float()
         image_features = F.normalize(embed, dim=1)
-        text_features = F.normalize(H, dim=1) 
+
+        text_features = perceptor.encode_text(tok).float().to(device)
+        text_features = F.normalize(text_features, dim=1) 
         clip_scores = (logits_scale * (image_features * text_features).sum(dim=1)).cpu()
         clip_scores_batches.append(clip_scores)
     clip_scores = torch.cat(clip_scores_batches)
