@@ -430,7 +430,7 @@ def train(config_file):
 
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
-    percetor = perceptor.to(device)
+    perceptor = perceptor.to(device)
     clip_size = config.get("clip_size", CLIP_SIZE[clip_model])
     clip_dim = config.get("clip_dim", CLIP_DIM[clip_model])
     vq_channels = model.quantize.embedding.weight.shape[1]
@@ -733,7 +733,7 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
-    percetor = perceptor.to(device)
+    perceptor = perceptor.to(device)
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -839,7 +839,7 @@ def evaluate(
     clip_size = CLIP_SIZE[clip_model]
     
     perceptor = load_clip_model(clip_model)
-    percetor = perceptor.to(device)
+    perceptor = perceptor.to(device)
 
     encoder = load_clip_model(config.clip_model, path=config.get("clip_model_path"))
     encoder = encoder.to(device)
