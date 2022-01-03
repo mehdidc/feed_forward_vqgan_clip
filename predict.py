@@ -5,14 +5,17 @@ import torch
 from PIL import Image
 import clip
 import torchvision
-from main import load_vqgan_model, CLIP_DIM, clamp_with_grad, synth
+from main import load_vqgan_model, CLIP_DIM, clamp_with_grad, synth, load_clip_model
 
 MODELS = [
-    "cc12m_32x1024_vitgan_v0.1.th",
-    "cc12m_32x1024_vitgan_v0.2.th",
-    "cc12m_32x1024_mlp_mixer_v0.2.th",
+    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.1.th",
+    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.2.th",
+    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.2.th",
+    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th",
+    "cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th",
+    "cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th",
 ]
-DEFAULT_MODEL = "cc12m_32x1024_vitgan_v0.2.th"
+DEFAULT_MODEL = "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.2.th"
 
 class Predictor(cog.Predictor):
     def setup(self):
@@ -25,7 +28,7 @@ class Predictor(cog.Predictor):
         vqgan_config = config.vqgan_config
         vqgan_checkpoint = config.vqgan_checkpoint
         clip_model = config.clip_model
-        self.perceptor = clip.load(clip_model, jit=False)[0].eval().requires_grad_(False).to(self.device)
+        self.perceptor = load_clip_model(clip_model, path=config.get("clip_model_path")).eval().requires_grad_(False).to(self.device)
         self.model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(self.device)
         self.z_min = self.model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
         self.z_max = self.model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
