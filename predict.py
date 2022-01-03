@@ -1,4 +1,5 @@
 import cog
+import random
 import tempfile
 from pathlib import Path
 import torch
@@ -44,9 +45,13 @@ class Predictor(cog.Predictor):
                 self.vqgans[(vqgan_config, vqgan_checkpoint)] = model, z_min, z_max
 
     @cog.input("prompt", type=str, help="prompt for generating image")
-    @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS, help="Model version")
+    @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS+["random"], help="Model version")
     def predict(self, prompt, model=DEFAULT_MODEL):
-        net = self.nets[model]
+        if model == "random":
+            key = random.choice(list(self.nets.keys()))
+            net = self.nets[key]
+        else:
+            net = self.nets[model]
         config = net.config
         clip_model = config.clip_model
         clip_model_path = config.get("clip_model_path")
