@@ -84,6 +84,13 @@ Loss will be output for tensorboard.
 
 ### version 0.3
 
+| Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
+|----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
+|  cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th)  | @mehdidc |
+| cc12m_32x1024_mlp_mixer_cloob_rn50_256x256 | MLPMixer | 1.32GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th) | @mehdidc |
+|  cc12m_256x16_xtransformer_clip_ViTB32_512x512  | Transformer | 571MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th) | @mehdidc |
+
+
 ### version 0.2
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
