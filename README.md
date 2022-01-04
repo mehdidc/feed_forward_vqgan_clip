@@ -16,6 +16,15 @@ the diversity of the generated images given the same prompt.
 
 # News
 
+- **01-03-2022**
+    - Support [CLOOB](https://github.com/ml-jku/cloob) as an alternative OpenAI's CLIP models
+    - Support [X-transformer](https://github.com/lucidrains/x-transformers) as an alternative to MLP Mixer and VitGAN
+    - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing)) released (see 0.3 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models):
+        - New [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th) which use text and real image embeddings as a loss instead of just text embeddings, trained on conceptual captions 12M
+        - New [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th) based on [CLOOB](https://github.com/ml-jku/cloob)
+        - First 512x512 [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th) based on [X-transformer](https://github.com/lucidrains/x-transformers)
+    - Update [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) with Real-ESRGAN to upscale the images
+
 - **09-22-2021** 
     - New models released (see 0.2 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
     - New [Colab notebook](https://colab.research.google.com/drive/1QYg1J4i5gurhofkvwMNrlMibMOjnjU5I?usp=sharing) for training from scratch or fine-tuning
@@ -71,11 +80,11 @@ Loss will be output for tensorboard.
 (ff_vqgan_clip_venv) tensorboard --logdir results
 ```
 
-
-
 ## Pre-trained models
 
-### version 0.2 (last)
+### version 0.3
+
+### version 0.2
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
@@ -118,3 +127,4 @@ VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transform
 - Thanks to [@afiaka87](https://github.com/afiaka87) for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
 - Thanks to [@CJWBW](https://github.com/CJWBW) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
+- Thanks to the authors of [CLOOB](https://github.com/ml-jku/cloob) for the code and the pre-trained models
