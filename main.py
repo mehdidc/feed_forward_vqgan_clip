@@ -703,8 +703,45 @@ def train(config_file):
                     wandb_run.log_artifact(model_artifact)
             step += 1
 
+def train_net2net(config_file):
+    from net2net.modules.flow.loss import NLL
+    from net2net.modules.flow.flatflow import ConditionalFlatCouplingFlow
+    config = OmegaConf.load(config_file)
+    if not hasattr(config, "folder"):
+        config.folder = os.path.dirname(config_file)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    in_features, out_features = torch.load(config.path)
+    tensor_dataset = torch.utils.data.TensorDataset(in_features, out_features)
+    dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=config.batch_size)
+    flow = ConditionalFlatCouplingFlow(
+        in_channels=out_features.shape[1], 
+        conditioning_dim=in_features.shape[1], 
+        embedding_dim=config.embedding_dim, 
+        hidden_dim=config.hidden_dim,
+        hidden_depth=config.hidden_deth,
+        n_flows=config.n_flows,
+    )
+    flow = flow.to(device)
+    get_loss = NLL()
+    opt = torch.optim.Adam(flow.parameters(), lr=config.lr, betas=config.adam_betas)
+    it = 0
+    for epoch in range(config.epochs):
+        for in_feats, out_feats in dataloader:
+            in_feats = in_feats.view(len(in_feats),-1,1,1).to(device)
+            out_feats = out_feats.view(len(in_feats),-1,1,1).to(device)
+            zz, logdet = flow(image,text)
+            loss, log_dict = get_loss(zz, logdet)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            if it % config.log_interval == 0:
+                print(epoch, loss.item())
+                print(log_dict)
+                torch.save(flow, os.path.join(config.folder, "flow.th"))
+            it += 1
 
-def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
+
+def test(model_path, text_or_path, *, net2net_model_path=None, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -727,7 +764,12 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         number of images per row in the grid of images
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
     net = torch.load(model_path, map_location="cpu").to(device)
+    if net2net_model_path:
+        flow = torch.load(net2net_model_path, map_location="cpu").to(device)
+    else:
+        flow = None
     config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -745,9 +787,12 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     normalize_input = config.get("normalize_input", False)
     toks = clip.tokenize(texts, truncate=True)
     H = perceptor.encode_text(toks.to(device)).float()
+    H = H.repeat(nb_repeats, 1)
+    if flow is not None:
+        H = flow.sample(H.view(len(H),-1,1,1))
+        H = H[:,:,0,0]
     if normalize_input:
         H = F.normalize(H, dim=1)
-    H = H.repeat(nb_repeats, 1)
     noise_dim = net.config.noise_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
