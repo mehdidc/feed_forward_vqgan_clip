@@ -16,7 +16,7 @@ the diversity of the generated images given the same prompt.
 
 # News
 
-- **01-03-2022**
+- **01-04-2022**
     - Support [CLOOB](https://github.com/ml-jku/cloob) as an alternative OpenAI's CLIP models
     - Support [X-transformer](https://github.com/lucidrains/x-transformers) as an alternative to MLP Mixer and VitGAN
     - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing)) released (see 0.3 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models):
