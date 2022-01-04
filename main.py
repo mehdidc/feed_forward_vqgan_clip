@@ -703,7 +703,7 @@ def train(config_file):
                     wandb_run.log_artifact(model_artifact)
             step += 1
 
-def train_net2net(config_file):
+def train_flow_model(config_file):
     from net2net.modules.flow.loss import NLL
     from net2net.modules.flow.flatflow import ConditionalFlatCouplingFlow
     config = OmegaConf.load(config_file)
@@ -741,7 +741,7 @@ def train_net2net(config_file):
             it += 1
 
 
-def test(model_path, text_or_path, *, net2net_model_path=None, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
+def test(model_path, text_or_path, *, flow_model_path=None, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -752,6 +752,9 @@ def test(model_path, text_or_path, *, net2net_model_path=None, nb_repeats=1, out
         can either be:
          - a text prompt. several text prompts can be provided  by delimiting them using "|"
          - a path to a text file .txt, where each line is a text prompt
+
+    flow_model_path: str
+        path of flow model, trained using `train_flow_model`
     
     nb_repeats: int
         number of times the same text prompt is repeated
@@ -766,8 +769,8 @@ def test(model_path, text_or_path, *, net2net_model_path=None, nb_repeats=1, out
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     net = torch.load(model_path, map_location="cpu").to(device)
-    if net2net_model_path:
-        flow = torch.load(net2net_model_path, map_location="cpu").to(device)
+    if flow_model_path:
+        flow = torch.load(flow_model_path, map_location="cpu").to(device)
     else:
         flow = None
     config = net.config
@@ -998,4 +1001,4 @@ def load_clip_model(model_type, path=None):
 
 
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images, encode_text_and_images, encode_text_and_images_webdataset, evaluate])
+    run([train, test, tokenize, encode_images, encode_text_and_images, encode_text_and_images_webdataset, evaluate, train_flow_model])
