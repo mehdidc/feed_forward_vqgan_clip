@@ -1,3 +1,4 @@
+torch
 clip-anytorch
 clize
 einops==0.3.0
@@ -18,4 +19,5 @@ torchaudio
 torchmetrics
 torchvision
 torchtext
+entmax
 x-transformers==0.19.1
