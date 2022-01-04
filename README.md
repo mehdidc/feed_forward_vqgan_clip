@@ -133,5 +133,5 @@ to all the authors who contributed to the notebook ([@crowsonkb](https://github.
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to [@afiaka87](https://github.com/afiaka87) for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
-- Thanks to [@CJWBW](https://github.com/CJWBW) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
+- Thanks to [@CJWBW](https://github.com/CJWBW) and [@andreasjansson](https://github.com/andreasjansson) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
 - Thanks to the authors of [CLOOB](https://github.com/ml-jku/cloob) for the code and the pre-trained models
