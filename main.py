@@ -713,31 +713,46 @@ def train_flow_model(config_file):
     in_features, out_features = torch.load(config.path)
     tensor_dataset = torch.utils.data.TensorDataset(in_features, out_features)
     dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=config.batch_size)
-    flow = ConditionalFlatCouplingFlow(
-        in_channels=out_features.shape[1], 
-        conditioning_dim=in_features.shape[1], 
-        embedding_dim=config.embedding_dim, 
-        hidden_dim=config.hidden_dim,
-        hidden_depth=config.hidden_deth,
-        n_flows=config.n_flows,
-    )
-    flow = flow.to(device)
+    model_path = os.path.join(config.folder, "model.th")
+    if os.path.exists(model_path):
+        print("Resume")
+        flow = torch.load(model_path, map_location="cpu").to(device)
+    else:
+        flow = ConditionalFlatCouplingFlow(
+            in_channels=out_features.shape[1], 
+            conditioning_dim=in_features.shape[1], 
+            embedding_dim=config.embedding_dim, 
+            hidden_dim=config.hidden_dim,
+            hidden_depth=config.hidden_depth,
+            n_flows=config.n_flows,
+        )
+        flow.epoch = 0
+        flow.it = 0
+        flow = flow.to(device)
     get_loss = NLL()
+    opt_path = os.path.join(config.folder, "opt.th")
     opt = torch.optim.Adam(flow.parameters(), lr=config.lr, betas=config.adam_betas)
-    it = 0
-    for epoch in range(config.epochs):
+    if os.path.exists(opt_path):
+        opt_state_dict = torch.load(opt_path, map_location="cpu")
+        opt.load_state_dict(opt_state_dict)
+    it = flow.it
+    start = flow.epoch
+    for epoch in range(start, config.epochs):
         for in_feats, out_feats in dataloader:
             in_feats = in_feats.view(len(in_feats),-1,1,1).to(device)
-            out_feats = out_feats.view(len(in_feats),-1,1,1).to(device)
-            zz, logdet = flow(image,text)
+            out_feats = out_feats.view(len(out_feats),-1,1,1).to(device)
+            zz, logdet = flow(out_feats, in_feats)
             loss, log_dict = get_loss(zz, logdet)
             opt.zero_grad()
             loss.backward()
             opt.step()
             if it % config.log_interval == 0:
-                print(epoch, loss.item())
+                print(epoch, it, loss.item())
                 print(log_dict)
-                torch.save(flow, os.path.join(config.folder, "flow.th"))
+                flow.it = it
+                flow.epoch = epoch
+                torch.save(flow, model_path)
+                torch.save(opt.state_dict(), opt_path)
             it += 1
 
 
