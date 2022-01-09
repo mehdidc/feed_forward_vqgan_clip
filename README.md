@@ -19,7 +19,7 @@ the diversity of the generated images given the same prompt.
 - **01-04-2022**
     - Support [CLOOB](https://github.com/ml-jku/cloob) as an alternative OpenAI's CLIP models
     - Support [X-transformer](https://github.com/lucidrains/x-transformers) as an alternative to MLP Mixer and VitGAN
-    - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing)) released (see 0.3 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models):
+    - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)) ) released (see 0.3 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models):
         - New [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th) which use text and real image embeddings as a loss instead of just text embeddings, trained on conceptual captions 12M
         - New [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th) based on [CLOOB](https://github.com/ml-jku/cloob)
         - First 512x512 [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th) based on [X-transformer](https://github.com/lucidrains/x-transformers)
