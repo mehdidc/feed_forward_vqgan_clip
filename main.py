@@ -570,8 +570,10 @@ def train(config_file):
                     noise = NOISE[inds].to(device).repeat(bs, 1).view(bs,repeat,-1).permute(1,0,2).contiguous().view(bs*repeat,-1)
                 else:
                     noise = torch.randn(len(inp_feats), noise_dim).to(device)
-                inp_feats = torch.cat((inp_feats,noise),dim=1)
-            z = net(inp_feats)
+                inp_feats_net = torch.cat((inp_feats,noise),dim=1)
+            else:
+                inp_feats_net = inp_feats
+            z = net(inp_feats_net)
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
