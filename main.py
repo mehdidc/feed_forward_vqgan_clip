@@ -66,6 +66,7 @@ CLIP_SIZE = {
     "ViT-B/32": 224,
     "cloob_rn50": 224,
     "cloob_rn50x4": 288,
+    "cloob_laion_400m_vit_b_16_32_epochs": 224,
 }
 CLIP_DIM = {
     "RN50": 1024,
@@ -76,6 +77,7 @@ CLIP_DIM = {
     "ViT-B/16": 512,
     "cloob_rn50": 1024,
     "cloob_rn50x4": 640,
+    "cloob_laion_400m_vit_b_16_32_epochs": 512,
 }
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
@@ -144,6 +146,15 @@ def synth(model, z):
     x  = clamp_with_grad(model.decode(z_q).add(1).div(2), 0, 1)
     return x
 
+class Resize(nn.Module):
+
+    def __init__(self, size):
+        super().__init__()
+        self.size = size
+
+    def forward(self, x):
+        return nn.functional.interpolate(x, (self.size, self.size), mode="bilinear")
+
 class MakeCutouts(nn.Module):
     def __init__(self, cut_size, cutn, cut_pow=1., augs=None, pool=True):
         super().__init__()
@@ -191,10 +202,16 @@ class MakeCutouts(nn.Module):
                 augment_list.append(K.RandomCrop(size=(self.cut_size,self.cut_size), p=0.5))
             elif item == 'Er':
                 augment_list.append(K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7))
+            elif item == 'Er2':
+                augment_list.append(K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=False, p=0.7))
             elif item == 'Re':
                 augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
             elif item == 'Re2':
                 augment_list.append(K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.9,1),  ratio=(0.75,1.333), cropping_mode='resample', p=1.0))
+            elif item == 'Cc':
+                augment_list.append(K.CenterCrop(size=(self.cut_size,self.cut_size), p=1.0))
+            elif item == 'R':
+                augment_list.append(Resize(self.cut_size))
         self.augs = nn.Sequential(*augment_list)
         self.noise_fac = 0.1
         self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
@@ -333,6 +350,7 @@ def encode_text_and_images_webdataset(
         imf.append(image_features)
         txf.append(text_features)
         nb += len(X)
+        print(nb)
     if USE_HOROVOD:
         nb = torch.Tensor([nb]).long()
         nb = hvd.allreduce(nb, average=False)
@@ -945,11 +963,22 @@ def load_dataset(path):
     return toks
 
 def load_clip_model(model_type, path=None):
-    if "cloob" in model_type:
-        # CLOOB
+    if model_type in ("cloob_rn50", "cloob_rn50x4"):
+        # CLOOB ckpts from original papers
         perceptor = CLOOB(path=path).eval().requires_grad_(False)
+    elif model_type in ("cloob_laion_400m_vit_b_16_16_epochs", "cloob_laion_400m_vit_b_16_32_epochs"):
+        # CLOOB models trained by @crowsonkb on LAION
+        import cloob_crowsonkb
+        config = cloob_crowsonkb.get_config(model_type)
+        model = cloob_crowsonkb.get_pt_model(config)
+        checkpoint = cloob_crowsonkb.download_checkpoint(config)
+        model.load_state_dict(cloob_crowsonkb.get_pt_params(config, checkpoint))
+        model.eval().requires_grad_(False)
+        perceptor = model
+        perceptor.encode_image = perceptor.image_encoder
+        perceptor.encode_text = perceptor.text_encoder
     else:
-        # CLIP
+        # OpenAI CLIP
         perceptor = clip.load(model_type, jit=False)[0].eval().requires_grad_(False)
     return perceptor
 
