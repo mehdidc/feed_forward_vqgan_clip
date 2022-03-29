@@ -564,6 +564,8 @@ def train(config_file):
     avg_loss = 1. 
     step = 0
     normalize_input = config.get("normalize_input", False)
+    l2_coef = config.get("l2_coef", 0.)
+
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -595,6 +597,10 @@ def train(config_file):
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
+            if l2_coef > 0:
+                l2 = (z**2).mean()
+            else:
+                l2 = torch.Tensor([0.])
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
@@ -643,11 +649,13 @@ def train(config_file):
 
             # 1) minimize distance between generated images CLIP features and text prompt features
             # 2) maximize diversity of the generated images
-            loss = dists  - config.diversity_coef * div 
+            loss = dists  - config.diversity_coef * div  + l2_coef * l2
             loss.backward()
             if clip_grad_norm:
                 clip_grad_norm_(net.parameters(), clip_grad_norm)
             opt.step()
+            if USE_HOROVOD:
+                loss = hvd.allreduce(loss)
             if rank_zero and use_ema:
                 ema.update()
             if rank_zero: 
@@ -659,7 +667,7 @@ def train(config_file):
                     wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
-                print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}")
+                print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f}")
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
