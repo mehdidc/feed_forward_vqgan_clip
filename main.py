@@ -64,6 +64,7 @@ CLIP_SIZE = {
     "RN50x4": 288,
     "RN50x16": 384,
     "ViT-B/32": 224,
+    "ViT-L/14": 224,
     "cloob_rn50": 224,
     "cloob_rn50x4": 288,
     "cloob_laion_400m_vit_b_16_32_epochs": 224,
@@ -75,6 +76,7 @@ CLIP_DIM = {
     "RN50x16": 768,
     "ViT-B/32": 512,
     "ViT-B/16": 512,
+    "ViT-L/14": 768,
     "cloob_rn50": 1024,
     "cloob_rn50x4": 640,
     "cloob_laion_400m_vit_b_16_32_epochs": 512,
@@ -656,12 +658,16 @@ def train(config_file):
             opt.step()
             if USE_HOROVOD:
                 loss = hvd.allreduce(loss)
+                dists = hvd.allreduce(dists)
+                div = hvd.allreduce(div)
+                l2 = hvd.allreduce(l2)
             if rank_zero and use_ema:
                 ema.update()
             if rank_zero: 
                 log_writer.add_scalar("loss", loss.item(), step)
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
+                log_writer.add_scalar("l2", l2.item(), step)
                 if use_wandb and step % wandb_log_interval == 0:
                     log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
                     wandb.log(log)

@@ -1,3 +1,4 @@
+# CLOOB code from https://github.com/crowsonkb/cloob-training, thanks to @crowsonkb
 import math
 import pickle
 
@@ -286,9 +287,6 @@ def get_pt_params(config, checkpoint):
     cloob_params = pickle.load(open(checkpoint, 'rb'))['params']
     state = {**convert_jax_vit_image_params(cloob_params[0]), **convert_jax_text_params(cloob_params[1])}
     return state
-
-
-
 
 def load_config(path):
     return json.load(open(path))
