@@ -382,7 +382,7 @@ def encode_text_and_images_webdataset(
         torch.save((txf,imf), out)
 
 
-def tokenize(paths, out="tokenized.pkl", max_length:int=None):
+def tokenize(paths, out="tokenized.pkl", max_length:int=None, batch_size=None):
     """
     tokenize and save to a pkl file
 
@@ -602,7 +602,7 @@ def train(config_file):
             if l2_coef > 0:
                 l2 = (z**2).mean()
             else:
-                l2 = torch.Tensor([0.])
+                l2 = torch.Tensor([0.]).to(device)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
@@ -705,7 +705,7 @@ def train(config_file):
                         z = net(inp_feats)
                     #bs, vq_channels, vq_image_size, vq_image_size
                     z = z.contiguous()
-                    z = z.view(bs, vq_channels, vq_image_size, vq_image_size)
+                    z = z.view(len(z), vq_channels, vq_image_size, vq_image_size)
                     z = clamp_with_grad(z, z_min.min(), z_max.max())
                     #repeat*bs, 3, h, w
                     xr_fixed_batch = synth(model, z)
