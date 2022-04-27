@@ -41,7 +41,7 @@ from taming.modules.losses.lpips import normalize_tensor
 import clip
 from clip import simple_tokenizer
 from mlp_mixer_pytorch import Mixer
-from vitgan import Generator as VitGAN
+from vitgan import Generator as VitGAN, SimpleGenerator as SimpleVitGAN
 from transformer import XTransformer
 from cloob import CLOOB
 from omegaconf import OmegaConf
@@ -64,6 +64,7 @@ CLIP_SIZE = {
     "RN50x4": 288,
     "RN50x16": 384,
     "ViT-B/32": 224,
+    "ViT-B/16": 224,
     "ViT-L/14": 224,
     "cloob_rn50": 224,
     "cloob_rn50x4": 288,
@@ -440,7 +441,6 @@ def train(config_file):
     lpips.load_from_pretrained()
     lpips = lpips.to(device)
     toks = load_dataset(config.path) 
-    print(f"Number of text prompts:{len(toks)}")
 
     vqgan_config = config.vqgan_config
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -474,6 +474,16 @@ def train(config_file):
                 num_heads=config.get("num_heads", 6),
                 blocks=config.depth,
             )
+        elif config.model_type == "simple_vitgan":
+            net = SimpleVitGAN(
+                size=vq_image_size,
+                dropout = config.dropout, 
+                out_channels=vq_channels,
+                input_dim=clip_dim+noise_dim,
+                dim=config.dim,
+                num_heads=config.get("num_heads", 6),
+                blocks=config.depth,
+            )
         elif config.model_type == "mlp_mixer":
             net = Mixer(
                 input_dim=clip_dim+noise_dim, 
@@ -497,6 +507,10 @@ def train(config_file):
         else:
             raise ValueError("model_type should be 'vitgan' or  'mlp_mixer' or 'xtransformer'")
     net = net.to(device)
+    if not hasattr(net, "step"):
+        net.step = 0
+    if not hasattr(net, "epoch"):
+        net.epoch = 0
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
     opt_path = os.path.join(config.folder, "opt.th")
@@ -538,7 +552,16 @@ def train(config_file):
         dataset = torch.utils.data.TensorDataset(*toks)
     else:
         dataset = torch.utils.data.TensorDataset(toks, toks)
+    print(f"Number of examples:{len(dataset)}")
+
     diversity_mode = config.get("diversity_mode", "between_same_prompts")
+
+    if config.get("eval_path"):
+        eval_data = load_dataset(config.eval_path) 
+        eval_perceptor = load_clip_model(config.eval_clip_model).to(device) if config.get("eval_clip_model") else perceptor
+    else:
+        eval_data = None
+        eval_perceptor = None
 
     if USE_HOROVOD:
         sampler = torch.utils.data.DistributedSampler(
@@ -562,12 +585,21 @@ def train(config_file):
         net.NOISE = NOISE
     input_loss = config.get("input_loss", False)
     input_loss_coef = config.get("input_loss_coef", 1)
+    target_loss_coef = config.get("target_loss_coef", 1)
     clip_grad_norm = config.get("clip_grad_norm")
     avg_loss = 1. 
-    step = 0
+    step = net.step
     normalize_input = config.get("normalize_input", False)
     l2_coef = config.get("l2_coef", 0.)
-
+    logits_scale = eval_perceptor.logit_scale.exp().cpu() if eval_perceptor is not None else None
+    if config.get("scheduler") is not None:
+        if config.scheduler == "cosine":
+            steps = config.max_steps
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps, eta_min=0, last_epoch=-1, verbose=False)
+        else:
+            raise ValueError(config.scheduler)
+    else:
+        scheduler = None
     for epoch in range(epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
@@ -639,7 +671,7 @@ def train(config_file):
             embed = F.normalize(embed, dim=1)
             
             #dist between prompt features `H` and generated image features `embed`
-            dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
+            dists = target_loss_coef * ((H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean())
             if input_loss:
                 H = inp_feats.repeat(cutn, 1)
                 H = H.view(cutn, repeat, bs, clip_dim)
@@ -656,6 +688,8 @@ def train(config_file):
             if clip_grad_norm:
                 clip_grad_norm_(net.parameters(), clip_grad_norm)
             opt.step()
+            if scheduler is not None:
+                scheduler.step()
             if USE_HOROVOD:
                 loss = hvd.allreduce(loss)
                 dists = hvd.allreduce(dists)
@@ -674,9 +708,33 @@ def train(config_file):
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f}")
+                if eval_data is not None:
+                    text_emb = eval_perceptor.encode_text(eval_data.to(device)).float() if eval_data.dtype == torch.long else eval_data.float().to(device)
+                    out_feats = text_emb
+                    with torch.no_grad():
+                        z = net(text_emb)
+                        xr_eval = synth(model, z)
+                        xr_eval = torch.nn.functional.interpolate(xr_eval, size=(clip_size, clip_size), mode='bilinear')
+                        xr_eval = (xr_eval - mean) / std
+                        embed = eval_perceptor.encode_image(xr_eval).float() 
+                        H = F.normalize(out_feats, dim=-1)
+                        H = H.view(-1, clip_dim)
+                        embed = F.normalize(embed, dim=1)
+                        eval_dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
+                        
+                        eval_clip_score = (logits_scale * (H*embed).sum(dim=1)).mean()
+                        print(f"Eval dists: {eval_dists:.3f}")
+                        print(f"Eval clip score: {eval_clip_score:.3f}")
+                        log_writer.add_scalar("eval_dists", eval_dists.item(), step)
+                        log_writer.add_scalar("eval_clip_score", eval_clip_score.item(), step)
+                else:
+                    eval_dists = 0.0
+                # if step % log_interval == 0:
+                    # hvd.join()
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
+                net.step = step
                 torch.save(net, model_path)
                 if use_ema:
                     with ema.average_parameters():

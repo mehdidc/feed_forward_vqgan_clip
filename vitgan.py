@@ -259,6 +259,50 @@ class Generator(nn.Module):
         result = x.view(x.shape[0], self.out_channels, self.initialize_size * 8, self.initialize_size * 8)
         return result
 
+class SimpleGenerator(nn.Module):
+    def __init__(self,
+        size = 8,
+        in_channels=256,
+        dim = 384,
+        blocks = 6,
+        num_heads = 6,
+        dim_head = None,
+        dropout = 0,
+        out_channels = 3,
+        input_dim=1024,
+    ):
+        super().__init__()
+        self.size = size
+        self.dim = dim
+        self.blocks = blocks
+        self.num_heads = num_heads
+        self.dim_head = dim_head
+        self.dropout = dropout
+        self.out_channels = out_channels
+
+        self.pos_emb1D = nn.Parameter(torch.randn(self.size*self.size, dim))
+
+        self.mlp = nn.Linear(input_dim, (self.size*self.size) * self.dim)
+        self.inp = nn.Linear(input_dim, (self.size*self.size) * self.dim)
+        self.Transformer_Encoder = GTransformerEncoder(dim, blocks, num_heads, dim_head, dropout)
+
+        # Implicit Neural Representation
+        self.w_out = nn.Sequential(
+            # SineLayer(dim, dim * 2, is_first = True, omega_0 = 30.),
+            # SineLayer(dim * 2, self.initialize_size * 8 * self.out_channels, is_first = False, omega_0 = 30)
+            nn.Linear(dim, self.out_channels),
+        )
+        self.sln_norm = SLN(self.dim)
+
+    def forward(self, noise):
+        inp = self.inp(noise)
+        x = self.mlp(noise).view(-1, self.size*self.size, self.dim)
+        inp_emb = inp.view(inp.shape[0], self.dim, self.size*self.size).permute(0,2,1).contiguous()
+        x, hl = self.Transformer_Encoder(inp_emb+self.pos_emb1D, x)
+        x = self.sln_norm(hl, x)
+        x = self.w_out(x)  # Replace to siren
+        result = x.view(x.shape[0], self.size, self.size, self.out_channels,).permute(0,3,1,2).contiguous()
+        return result
 
 class Discriminator(nn.Module):
     def __init__(self,
