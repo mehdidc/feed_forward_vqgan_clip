@@ -459,7 +459,7 @@ def train(config_file):
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
-    
+    factor = 2 if config.get("concat_embs") else 1
     if os.path.exists(model_path):
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
@@ -469,7 +469,7 @@ def train(config_file):
                 initialize_size = vq_image_size//8, 
                 dropout = config.dropout, 
                 out_channels=vq_channels,
-                input_dim=clip_dim+noise_dim,
+                input_dim=clip_dim*factor+noise_dim,
                 dim=config.dim,
                 num_heads=config.get("num_heads", 6),
                 blocks=config.depth,
@@ -479,14 +479,14 @@ def train(config_file):
                 size=vq_image_size,
                 dropout = config.dropout, 
                 out_channels=vq_channels,
-                input_dim=clip_dim+noise_dim,
+                input_dim=clip_dim*factor+noise_dim,
                 dim=config.dim,
                 num_heads=config.get("num_heads", 6),
                 blocks=config.depth,
             )
         elif config.model_type == "mlp_mixer":
             net = Mixer(
-                input_dim=clip_dim+noise_dim, 
+                input_dim=clip_dim*factor+noise_dim, 
                 image_size=vq_image_size, 
                 channels=vq_channels, 
                 patch_size=1, 
@@ -496,7 +496,7 @@ def train(config_file):
             )
         elif config.model_type == "xtransformer":
             net = XTransformer(
-                input_dim=clip_dim+noise_dim, 
+                input_dim=clip_dim*factor+noise_dim, 
                 image_size=vq_image_size, 
                 channels=vq_channels, 
                 dim=config.dim, 
@@ -627,6 +627,8 @@ def train(config_file):
                 inp_feats_net = torch.cat((inp_feats,noise),dim=1)
             else:
                 inp_feats_net = inp_feats
+            if factor == 2:
+                inp_feats_net = torch.cat((inp_feats_net, out_feats), dim=1)
             z = net(inp_feats_net)
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
