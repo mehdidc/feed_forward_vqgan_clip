@@ -750,14 +750,19 @@ def train(config_file):
                     with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
                         fd.write(text)
                 
-                inp_fixed_batch, _ = first_batch
+                inp_fixed_batch, out_fixed_batch = first_batch
+                out_fixed_batch = out_fixed_batch.to(device)
                 inp_fixed_batch = inp_fixed_batch.to(device)
                 with torch.no_grad():
                     inp_feats = perceptor.encode_text(inp_fixed_batch).float() if inp_fixed_batch.dtype == torch.long else inp_fixed_batch.float()
+                    out_feats = perceptor.encode_text(out_fixed_batch).float() if out_fixed_batch.dtype == torch.long else out_fixed_batch.float()
+
                     if normalize_input:
                         inp_feats = F.normalize(inp_feats, dim=1)
                     if noise_dim:
                         inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
+                    if factor == 2:
+                        inp_feats = torch.cat((inp_feats, out_feats), dim=1)
                     if use_ema:
                         with ema.average_parameters():
                             z = net(inp_feats)
