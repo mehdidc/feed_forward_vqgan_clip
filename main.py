@@ -301,12 +301,17 @@ def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="featur
     image_features = torch.cat(image_features_list)
     torch.save((text_features, image_features), out)
 
+
 def encode_text_and_images_webdataset(
     pattern, *, 
     clip_model="ViT-B/32", clip_path:str=None, 
     batch_size=512, 
     img_col="input.jpg", txt_col="output.txt", 
-    out="features.pkl"
+    out="features.pkl",
+    num_workers=8,
+    image_quality_threshold:float=None,
+    image_quality_method='nima',
+    merge=False,
 ):
     import webdataset as wds
     from PIL import Image
@@ -316,6 +321,14 @@ def encode_text_and_images_webdataset(
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cuda" and USE_HOROVOD:
         torch.cuda.set_device(hvd.local_rank())
+    try:
+        from pyiqa.models.inference_model import InferenceModel
+        iqa_model = InferenceModel(image_quality_method, '')
+        #iqa_model.device = 'cpu'
+        #iqa_model.net.to('cpu')
+    except Exception:
+        pass
+
     _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
     model = load_clip_model(clip_model, path=clip_path).eval().to(device)
     def transform_image(x):
@@ -325,7 +338,8 @@ def encode_text_and_images_webdataset(
     def filter_dataset(item):
         try:
             x = Image.open(BytesIO(item[img_col]))
-        except Exception:
+        except Exception as ex:
+            print(ex)
             return False
         else:
             return True
@@ -339,7 +353,9 @@ def encode_text_and_images_webdataset(
     ds = ds.to_tuple(img_col, txt_col)
     ds = ds.map_tuple(transform_image, transform_text)
     ds = ds.batched(batch_size)
-    dl = wds.WebLoader(ds, batch_size=None, shuffle=False, num_workers=32)
+    dl = wds.WebLoader(ds, batch_size=None, shuffle=False, num_workers=num_workers)
+    mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
+    std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     imf = []
     txf = []
     nb = 0
@@ -347,13 +363,23 @@ def encode_text_and_images_webdataset(
         Y = clip.tokenize(Y, truncate=True)
         X = X.to(device)
         Y = Y.to(device)
+        if image_quality_threshold is not None:
+            scores = iqa_model.net(X*std+mean).flatten()
+            good_quality = scores>=image_quality_threshold
+            X = X[good_quality]
+            Y = Y[good_quality]
+            if len(X) == 0:
+                continue
+        #if hvd.rank() == 0:
+        #    print(X.shape)
         with torch.no_grad():
             image_features = model.encode_image(X).cpu()
             text_features = model.encode_text(Y).cpu()
         imf.append(image_features)
         txf.append(text_features)
         nb += len(X)
-        print(nb)
+        if hvd.rank() == 0:
+            print(nb)
     if USE_HOROVOD:
         nb = torch.Tensor([nb]).long()
         nb = hvd.allreduce(nb, average=False)
@@ -365,20 +391,21 @@ def encode_text_and_images_webdataset(
         idx = hvd.rank()
         torch.save((txf,imf), f"{out}_{idx}")
         hvd.join()
-        if hvd.rank() == 0:
-            xs = []
-            ys = []
-            paths = [f"{out}_{idx}" for idx in range(hvd.size())]
-            for path in paths:
-                x, y = torch.load(path)
-                xs.append(x)
-                ys.append(y)
-            xs = torch.cat(xs)
-            ys = torch.cat(ys)
-            torch.save((xs,ys), out)
-            for path in paths:
-                os.remove(path)
-        hvd.join()
+        if merge:
+            if hvd.rank() == 0:
+                xs = []
+                ys = []
+                paths = [f"{out}_{idx}" for idx in range(hvd.size())]
+                for path in paths:
+                    x, y = torch.load(path)
+                    xs.append(x)
+                    ys.append(y)
+                xs = torch.cat(xs)
+                ys = torch.cat(ys)
+                torch.save((xs,ys), out)
+                for path in paths:
+                    os.remove(path)
+            hvd.join()
     else:
         torch.save((txf,imf), out)
 
