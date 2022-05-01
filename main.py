@@ -828,6 +828,9 @@ def train(config_file):
                     model_artifact.add_file(model_path)
                     wandb_run.log_artifact(model_artifact)
             step += 1
+            if config.get("max_steps") is not None and step >= config.max_steps:
+                # finish
+                return
 
 
 def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
@@ -906,7 +909,10 @@ def evaluate(
     img_folder=None, 
     images_per_row=8, 
     seed=42, 
-    clip_model="ViT-B/32"
+    clip_model="ViT-B/32",
+    image_callback=None,
+    compute_fid=False,
+    inception_features_real_path=None,
 ):
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
@@ -949,6 +955,7 @@ def evaluate(
         seed used to subsample the prompt dataset
     
     """
+ 
     name = os.path.basename(data_path) + "_" + clip_model.replace("/", "_")
     if not out_folder:
         out_folder = os.path.dirname(model_path)
@@ -958,6 +965,13 @@ def evaluate(
         os.makedirs(img_folder, exist_ok=True)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if compute_fid:
+        from piq.feature_extractors import InceptionV3
+        assert inception_features_real_path
+        inceptionv3 = InceptionV3().to(device)
+        inception_features = []
+    
+
     net = torch.load(model_path, map_location="cpu").to(device)
     config = net.config
     vqgan_config = config.vqgan_config 
@@ -1015,6 +1029,11 @@ def evaluate(
         z = net(Hi)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
         xr = synth(model, z)
+        if compute_fid:
+            f = inceptionv3(xr)
+            f = f[0].view(len(xr), -1)
+            f = f.cpu()
+            inception_features.append(f)
         if save_images:
             grid = torchvision.utils.make_grid(xr.cpu(), nrow=images_per_row)
             TF.to_pil_image(grid).save(os.path.join(img_folder, f"batch_{batch_idx:010d}.png"))
@@ -1032,7 +1051,6 @@ def evaluate(
         clip_scores_batches.append(clip_scores)
     clip_scores = torch.cat(clip_scores_batches)
 
-
     out = os.path.join(out_folder, f"eval_{name}.th")
     print(f"Saving to {out}")
     torch.save(clip_scores, out)
@@ -1046,12 +1064,23 @@ def evaluate(
         "clip_score_std": std,
         f"clip_score_atleast_{clip_threshold}": clip_score_atleast,
     }
+    if compute_fid:
+        from piq import FID
+        fake_features = torch.cat(inception_features)
+        real_features = torch.load(inception_features_real_path, map_location="cpu")
+        fid_metric = FID()
+        fid = fid_metric(real_features, fake_features).item()
+        fid_dataset = os.path.basename(inception_features_real_path)
+        dump[f"fid_{fid_dataset}"] = fid
+        print(f"FID: {fid}")
+
     out = os.path.join(out_folder, f"eval_{name}.json")
     print(f"Saving to {out}")
     with open(out, "w") as fd:
         fd.write(json.dumps(dump))
     print(f"CLIP score mean: {mean}. CLIP score std:{std}")
     print(f"Fraction of images with a CLIP score of at least {clip_threshold}: {clip_score_atleast}")
+    return dump
 
 def load_dataset(path):
     # path can be the following:
