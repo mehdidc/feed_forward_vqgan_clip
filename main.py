@@ -24,6 +24,7 @@ from PIL import ImageFile, Image
 import json
 import numpy as np
 import kornia.augmentation as K
+import kornia
 import imageio
 
 import torch
@@ -438,6 +439,23 @@ def tokenize(paths, out="tokenized.pkl", max_length:int=None, batch_size=None):
     toks = torch.cat(toks)
     torch.save(toks, out)
 
+def tv_loss(Y_hat):
+    return 0.5 * (torch.abs(Y_hat[:, :, 1:, :] - Y_hat[:, :, :-1, :]).mean() +
+                  torch.abs(Y_hat[:, :, :, 1:] - Y_hat[:, :, :, :-1]).mean())
+
+
+def tv_loss_with_beta(input_matrix, beta):
+    """
+        Total variation norm is the second norm in the paper
+        represented as R_V(x)
+        https://github.com/utkuozbulak/pytorch-cnn-visualizations/blob/master/src/inverted_representation.py
+    """
+    to_check = input_matrix[:, :, :-1, :-1]  # Trimmed: right - bottom
+    one_bottom = input_matrix[:, :, 1:, :-1]  # Trimmed: top - right
+    one_right = input_matrix[:, :, :-1, 1:]  # Trimmed: top - right
+    total_variation = (((to_check - one_bottom)**2 +
+                        (to_check - one_right)**2)**(beta/2)).sum()
+    return total_variation
 def train(config_file):
 
     config = OmegaConf.load(config_file)
@@ -618,6 +636,8 @@ def train(config_file):
     step = net.step
     normalize_input = config.get("normalize_input", False)
     l2_coef = config.get("l2_coef", 0.)
+    tv_coef = config.get("tv_coef", 0.)
+    tv_exponent = config.get("tv_exponent", 1.)
     logits_scale = eval_perceptor.logit_scale.exp().cpu() if eval_perceptor is not None else None
     if config.get("scheduler") is not None:
         if config.scheduler == "cosine":
@@ -667,6 +687,11 @@ def train(config_file):
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
+            if tv_coef > 0:
+                tv = tv_loss(xr)
+                #tv = tv_loss_with_beta(xr, beta=tv_exponent)
+            else:
+                tv = torch.Tensor([0.]).to(device)
             if config.diversity_coef:
                 div = 0
                 # for feats in [z]:
@@ -712,7 +737,7 @@ def train(config_file):
 
             # 1) minimize distance between generated images CLIP features and text prompt features
             # 2) maximize diversity of the generated images
-            loss = dists  - config.diversity_coef * div  + l2_coef * l2
+            loss = dists  - config.diversity_coef * div  + l2_coef * l2 + tv_coef * tv
             loss.backward()
             if clip_grad_norm:
                 clip_grad_norm_(net.parameters(), clip_grad_norm)
@@ -736,7 +761,7 @@ def train(config_file):
                     wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
-                print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f}")
+                print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f} tv:{tv.item()}")
                 if eval_data is not None:
                     text_emb = eval_perceptor.encode_text(eval_data.to(device)).float() if eval_data.dtype == torch.long else eval_data.float().to(device)
                     out_feats = text_emb
