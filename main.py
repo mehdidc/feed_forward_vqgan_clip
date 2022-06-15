@@ -67,6 +67,7 @@ CLIP_SIZE = {
     "cloob_rn50": 224,
     "cloob_rn50x4": 288,
     "openclip/ViT-B-32-quickgelu/laion400m_e32": 224,
+    "openclip/ViT-B-32/laion2b_e16": 224,
 }
 CLIP_DIM = {
     "RN50": 1024,
@@ -78,6 +79,7 @@ CLIP_DIM = {
     "cloob_rn50": 1024,
     "cloob_rn50x4": 640,
     "openclip/ViT-B-32-quickgelu/laion400m_e32": 512,
+    "openclip/ViT-B-32/laion2b_e16": 512,
 }
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
