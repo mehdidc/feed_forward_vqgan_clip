@@ -70,6 +70,8 @@ CLIP_SIZE = {
     "cloob_rn50": 224,
     "cloob_rn50x4": 288,
     "cloob_laion_400m_vit_b_16_32_epochs": 224,
+    "openclip/ViT-B-32-quickgelu/laion400m_e32": 224,
+    "openclip/ViT-B-32/laion2b_e16": 224,
 }
 CLIP_DIM = {
     "RN50": 1024,
@@ -82,6 +84,8 @@ CLIP_DIM = {
     "cloob_rn50": 1024,
     "cloob_rn50x4": 640,
     "cloob_laion_400m_vit_b_16_32_epochs": 512,
+    "openclip/ViT-B-32-quickgelu/laion400m_e32": 512,
+    "openclip/ViT-B-32/laion2b_e16": 512,
 }
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
@@ -160,12 +164,14 @@ class Resize(nn.Module):
         return nn.functional.interpolate(x, (self.size, self.size), mode="bilinear")
 
 class MakeCutouts(nn.Module):
-    def __init__(self, cut_size, cutn, cut_pow=1., augs=None, pool=True):
+    def __init__(self, cut_size, cutn, cut_pow=1., pool_size=None, interp_size=None, augs=None, pool=True, interpolate=False):
         super().__init__()
         self.cut_size = cut_size
         self.cutn = cutn
         self.cut_pow = cut_pow
         self.pool = pool
+        self.interpolate = interpolate
+        self.pool_size = pool_size
 
         # Parametrization of the augmentations and new augmentations taken from <https://github.com/nerdyrodent/VQGAN-CLIP>, thanks to @nerdyrodent.
         if not augs:
@@ -218,28 +224,32 @@ class MakeCutouts(nn.Module):
                 augment_list.append(Resize(self.cut_size))
         self.augs = nn.Sequential(*augment_list)
         self.noise_fac = 0.1
-        self.av_pool = nn.AdaptiveAvgPool2d((self.cut_size, self.cut_size))
-        self.max_pool = nn.AdaptiveMaxPool2d((self.cut_size, self.cut_size))
+        if pool_size is None:
+            pool_size = cut_size
+        if interp_size is None:
+            interp_size = pool_size
+        self.pool_size = pool_size
+        self.interp_size = interp_size
+        self.av_pool = nn.AdaptiveAvgPool2d((self.pool_size, self.pool_size))
+        self.max_pool = nn.AdaptiveMaxPool2d((self.pool_size, self.pool_size))
 
     def forward(self, input):
         sideY, sideX = input.shape[2:4]
         max_size = min(sideX, sideY)
         min_size = min(sideX, sideY, self.cut_size)
         cutouts = []
-        
         if self.pool:
             cutout = (self.av_pool(input) + self.max_pool(input))/2
             batch = cutout.repeat(self.cutn, 1, 1, 1)
         else:
             batch = input.repeat(self.cutn, 1, 1, 1)
-        # for _ in range(self.cutn):
-            # cutout = (self.av_pool(input) + self.max_pool(input))/2
-            # cutouts.append(cutout)
-        # batch = torch.cat(cutouts, dim=0)
         batch = self.augs(batch)
         if self.noise_fac:
             facs = batch.new_empty([len(batch), 1, 1, 1]).uniform_(0, self.noise_fac)
             batch = batch + facs * torch.randn_like(batch)
+        if self.interpolate:
+            # batch = torch.nn.functional.interpolate(batch, size=(self.interp_size, self.interp_size), mode="bicubic")
+            batch = torch.nn.functional.adaptive_avg_pool2d(batch, (self.interp_size, self.interp_size))
         return batch
 
 def encode_images(pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="features.pkl"):
@@ -496,8 +506,8 @@ def train(config_file):
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
     perceptor = perceptor.to(device)
-    clip_size = config.get("clip_size", CLIP_SIZE[clip_model])
-    clip_dim = config.get("clip_dim", CLIP_DIM[clip_model])
+    clip_size = config.get("clip_size", CLIP_SIZE.get(clip_model))
+    clip_dim = config.get("clip_dim", CLIP_DIM.get(clip_model))
     vq_channels = model.quantize.embedding.weight.shape[1]
 
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
@@ -587,7 +597,13 @@ def train(config_file):
     mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
     std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     cutn = config.cutn
-    make_cutouts = MakeCutouts(clip_size, cutn=cutn, augs=config.get("augs"), pool=config.get("pool", True))
+    cut_size = config.get("cut_size", clip_size)
+    make_cutouts = MakeCutouts(
+        cut_size=cut_size, cutn=cutn, 
+        augs=config.get("augs"), 
+        pool=config.get("pool", True), pool_size=config.get("pool_size", clip_size),
+        interpolate=config.get("interpolate", False), interp_size=config.get("interp_size", clip_size),
+    )
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     bs = config.batch_size
@@ -1137,6 +1153,12 @@ def load_clip_model(model_type, path=None):
         perceptor = model
         perceptor.encode_image = perceptor.image_encoder
         perceptor.encode_text = perceptor.text_encoder
+    elif "openclip" in model_type:
+        import open_clip
+        #e.g., openclip/ViT-B-32-quickgelu/laion400m_e32
+        prefix, arch, dataset = model_type.split("/")
+        perceptor, train_transform, eval_transform = open_clip.create_model_and_transforms(arch, pretrained=dataset)
+        perceptor = perceptor.eval().requires_grad_(False)
     else:
         # OpenAI CLIP
         perceptor = clip.load(model_type, jit=False)[0].eval().requires_grad_(False)
