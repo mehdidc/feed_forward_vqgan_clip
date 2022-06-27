@@ -147,9 +147,6 @@ def vector_quantize(x, codebook):
     return replace_grad(x_q, x)
 
 def synth(model, z):
-    # if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
-        # z_q = vector_quantize(z.movedim(1, 3), model.quantize.embed.weight).movedim(3, 1)
-    # else:
     z_q = vector_quantize(z.movedim(1, 3), model.quantize.embedding.weight).movedim(3, 1)
     x  = clamp_with_grad(model.decode(z_q).add(1).div(2), 0, 1)
     return x
@@ -453,19 +450,6 @@ def tv_loss(Y_hat):
     return 0.5 * (torch.abs(Y_hat[:, :, 1:, :] - Y_hat[:, :, :-1, :]).mean() +
                   torch.abs(Y_hat[:, :, :, 1:] - Y_hat[:, :, :, :-1]).mean())
 
-
-def tv_loss_with_beta(input_matrix, beta):
-    """
-        Total variation norm is the second norm in the paper
-        represented as R_V(x)
-        https://github.com/utkuozbulak/pytorch-cnn-visualizations/blob/master/src/inverted_representation.py
-    """
-    to_check = input_matrix[:, :, :-1, :-1]  # Trimmed: right - bottom
-    one_bottom = input_matrix[:, :, 1:, :-1]  # Trimmed: top - right
-    one_right = input_matrix[:, :, :-1, 1:]  # Trimmed: top - right
-    total_variation = (((to_check - one_bottom)**2 +
-                        (to_check - one_right)**2)**(beta/2)).sum()
-    return total_variation
 def train(config_file):
 
     config = OmegaConf.load(config_file)
@@ -514,7 +498,6 @@ def train(config_file):
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
-    factor = 2 if config.get("concat_embs") else 1
     if os.path.exists(model_path):
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
@@ -524,7 +507,7 @@ def train(config_file):
                 initialize_size = vq_image_size//8, 
                 dropout = config.dropout, 
                 out_channels=vq_channels,
-                input_dim=clip_dim*factor+noise_dim,
+                input_dim=clip_dim+noise_dim,
                 dim=config.dim,
                 num_heads=config.get("num_heads", 6),
                 blocks=config.depth,
@@ -534,14 +517,14 @@ def train(config_file):
                 size=vq_image_size,
                 dropout = config.dropout, 
                 out_channels=vq_channels,
-                input_dim=clip_dim*factor+noise_dim,
+                input_dim=clip_dim+noise_dim,
                 dim=config.dim,
                 num_heads=config.get("num_heads", 6),
                 blocks=config.depth,
             )
         elif config.model_type == "mlp_mixer":
             net = Mixer(
-                input_dim=clip_dim*factor+noise_dim, 
+                input_dim=clip_dim+noise_dim, 
                 image_size=vq_image_size, 
                 channels=vq_channels, 
                 patch_size=1, 
@@ -551,7 +534,7 @@ def train(config_file):
             )
         elif config.model_type == "xtransformer":
             net = XTransformer(
-                input_dim=clip_dim*factor+noise_dim, 
+                input_dim=clip_dim+noise_dim, 
                 image_size=vq_image_size, 
                 channels=vq_channels, 
                 dim=config.dim, 
@@ -690,8 +673,6 @@ def train(config_file):
                 inp_feats_net = torch.cat((inp_feats,noise),dim=1)
             else:
                 inp_feats_net = inp_feats
-            if factor == 2:
-                inp_feats_net = torch.cat((inp_feats_net, out_feats), dim=1)
             z = net(inp_feats_net)
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
@@ -705,12 +686,10 @@ def train(config_file):
             xr = synth(model, z)
             if tv_coef > 0:
                 tv = tv_loss(xr)
-                #tv = tv_loss_with_beta(xr, beta=tv_exponent)
             else:
                 tv = torch.Tensor([0.]).to(device)
             if config.diversity_coef:
                 div = 0
-                # for feats in [z]:
                 for feats in lpips.net( (xr-mean)/std):
                     if diversity_mode == "between_same_prompts":
                         feats = normalize_tensor(feats)
@@ -779,28 +758,37 @@ def train(config_file):
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f} tv:{tv.item()}")
                 if eval_data is not None:
-                    text_emb = eval_perceptor.encode_text(eval_data.to(device)).float() if eval_data.dtype == torch.long else eval_data.float().to(device)
-                    out_feats = text_emb
-                    with torch.no_grad():
-                        z = net(text_emb)
-                        xr_eval = synth(model, z)
-                        xr_eval = torch.nn.functional.interpolate(xr_eval, size=(clip_size, clip_size), mode='bilinear')
-                        xr_eval = (xr_eval - mean) / std
-                        embed = eval_perceptor.encode_image(xr_eval).float() 
-                        H = F.normalize(out_feats, dim=-1)
-                        H = H.view(-1, clip_dim)
-                        embed = F.normalize(embed, dim=1)
-                        eval_dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean()
-                        
-                        eval_clip_score = (logits_scale * (H*embed).sum(dim=1)).mean()
-                        print(f"Eval dists: {eval_dists:.3f}")
-                        print(f"Eval clip score: {eval_clip_score:.3f}")
-                        log_writer.add_scalar("eval_dists", eval_dists.item(), step)
-                        log_writer.add_scalar("eval_clip_score", eval_clip_score.item(), step)
+                    bs = config.batch_size
+                    eval_clip_score_list = []
+                    eval_dists_list = []
+                    for i in range(0, len(eval_data), bs):
+                        text_emb = (
+                            eval_perceptor.encode_text(eval_data[i:i+bs].to(device)).float() 
+                            if eval_data.dtype == torch.long else eval_data[i:i+bs].float().to(device)
+                        )
+                        out_feats = text_emb
+                        with torch.no_grad():
+                            z = net(text_emb)
+                            xr_eval = synth(model, z)
+                            xr_eval = torch.nn.functional.interpolate(xr_eval, size=(clip_size, clip_size), mode='bilinear')
+                            xr_eval = (xr_eval - mean) / std
+                            embed = eval_perceptor.encode_image(xr_eval).float() 
+                            H = F.normalize(out_feats, dim=-1)
+                            H = H.view(-1, clip_dim)
+                            embed = F.normalize(embed, dim=1)
+                            eval_dists = (H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2))
+
+                            eval_clip_score = (logits_scale * (H*embed).sum(dim=1))
+                            eval_dists_list.append(eval_dists.cpu())
+                            eval_clip_score_list.append(eval_clip_score.cpu())
+                    eval_dists = torch.cat(eval_dists_list).mean()
+                    eval_clip_score = torch.cat(eval_clip_score_list).mean()
+                    print(f"Eval dists: {eval_dists:.3f}")
+                    print(f"Eval clip score: {eval_clip_score:.3f}")
+                    log_writer.add_scalar("eval_dists", eval_dists.item(), step)
+                    log_writer.add_scalar("eval_clip_score", eval_clip_score.item(), step)
                 else:
                     eval_dists = 0.0
-                # if step % log_interval == 0:
-                    # hvd.join()
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
@@ -829,8 +817,6 @@ def train(config_file):
                         inp_feats = F.normalize(inp_feats, dim=1)
                     if noise_dim:
                         inp_feats = torch.cat((inp_feats, noise[:len(inp_feats)]), dim=1)
-                    if factor == 2:
-                        inp_feats = torch.cat((inp_feats, out_feats), dim=1)
                     if use_ema:
                         with ema.average_parameters():
                             z = net(inp_feats)
@@ -1166,4 +1152,12 @@ def load_clip_model(model_type, path=None):
 
 
 if __name__ == "__main__":
-    run([train, test, tokenize, encode_images, encode_text_and_images, encode_text_and_images_webdataset, evaluate])
+    run([
+        train, 
+        test, 
+        tokenize, 
+        encode_images, 
+        encode_text_and_images, 
+        encode_text_and_images_webdataset, 
+        evaluate
+    ])
