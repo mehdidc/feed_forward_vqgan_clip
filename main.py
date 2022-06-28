@@ -1,14 +1,6 @@
 """
 Feed forward VQGAN-CLIP model, where the goal is to eliminate the need for optimizing the latent
 space of VQGAN for each input prompt.
-
-- The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks
-to all the authors who contributed to the notebook (@crowsonkb, @advadnoun, @Eleiber, @Crimeacs, @Abulafia)
-- Thanks to @lucidrains, the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
-- Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
-VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
-- Thanks to @afiaka87 for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
-- Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
 """
 import os
 from clize import run
@@ -169,22 +161,10 @@ class MakeCutouts(nn.Module):
         self.pool = pool
         self.interpolate = interpolate
         self.pool_size = pool_size
-
         # Parametrization of the augmentations and new augmentations taken from <https://github.com/nerdyrodent/VQGAN-CLIP>, thanks to @nerdyrodent.
         if not augs:
             augs = ('Af', 'Pe', 'Ji', 'Er')
-        # self.augs = nn.Sequential(
-            # # K.RandomHorizontalFlip(p=0.5),
-            # # K.RandomVerticalFlip(p=0.5),
-            # # K.RandomSolarize(0.01, 0.01, p=0.7),
-            # # K.RandomSharpness(0.3,p=0.4),
-            # # K.RandomResizedCrop(size=(self.cut_size,self.cut_size), scale=(0.1,1),  ratio=(0.75,1.333), cropping_mode='resample', p=0.5),
-            # # K.RandomCrop(size=(self.cut_size,self.cut_size), p=0.5),
-            # K.RandomAffine(degrees=15, translate=0.1, p=0.7, padding_mode='border'),
-            # K.RandomPerspective(0.7,p=0.7),
-            # K.ColorJitter(hue=0.1, saturation=0.1, p=0.7),
-            # K.RandomErasing((.1, .4), (.3, 1/.3), same_on_batch=True, p=0.7),
-        # )
+
         augment_list = []
         for item in augs:
             if item == 'Ji2':
@@ -249,7 +229,9 @@ class MakeCutouts(nn.Module):
             batch = torch.nn.functional.adaptive_avg_pool2d(batch, (self.interp_size, self.interp_size))
         return batch
 
-def encode_images(pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="features.pkl"):
+def encode_images(
+    pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="features.pkl"
+):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
     model = load_clip_model(clip_model, path=clip_path)
@@ -264,7 +246,11 @@ def encode_images(pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="fe
     features = torch.cat(features)
     torch.save(features, out)
 
-def encode_text_and_images(folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", clip_model="ViT-B/32", clip_path:str=None):
+def encode_text_and_images(
+    folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", 
+    clip_model="ViT-B/32", 
+    clip_path:str=None
+):
     """
     encode (text,image) pairs to CLIP features
     can be used to train a text to image model.
@@ -321,6 +307,14 @@ def encode_text_and_images_webdataset(
     image_quality_method='nima',
     merge=False,
 ):
+    """
+    encode (text,image) pairs to CLIP features from webdataset.
+    can be used to train a text to image model.
+
+    Can optionally filter images according to a quality proxy metric
+    from `pyiqa`, if available. Check https://github.com/chaofengc/IQA-PyTorch 
+    for more info.
+    """
     import webdataset as wds
     from PIL import Image
     from io import BytesIO
@@ -332,8 +326,6 @@ def encode_text_and_images_webdataset(
     try:
         from pyiqa.models.inference_model import InferenceModel
         iqa_model = InferenceModel(image_quality_method, '')
-        #iqa_model.device = 'cpu'
-        #iqa_model.net.to('cpu')
     except Exception:
         pass
 
@@ -447,6 +439,9 @@ def tokenize(paths, out="tokenized.pkl", max_length:int=None, batch_size=None):
     torch.save(toks, out)
 
 def tv_loss(Y_hat):
+    """
+    Total variation loss
+    """
     return 0.5 * (torch.abs(Y_hat[:, :, 1:, :] - Y_hat[:, :, :-1, :]).mean() +
                   torch.abs(Y_hat[:, :, :, 1:] - Y_hat[:, :, :, :-1]).mean())
 
@@ -467,6 +462,9 @@ def train(config_file):
         )
         wandb_log_interval = config.get("wandb_log_interval", 1)
     if use_ema:
+        """
+        EMA improves the eval metrics a little bit
+        """
         from torch_ema import ExponentialMovingAverage
         ema_decay = config.get("ema_decay", 0.995)
 
@@ -475,10 +473,15 @@ def train(config_file):
         hvd.init()
         if device == "cuda":
             torch.cuda.set_device(hvd.local_rank())
+    if config.diversity_coef:
+        # VGG can be used for maximizing diversity
+        # on feature space
+        lpips = LPIPS()
+        lpips.load_from_pretrained()
+        lpips = lpips.to(device)
 
-    lpips = LPIPS()
-    lpips.load_from_pretrained()
-    lpips = lpips.to(device)
+
+    # Load dataset
     toks = load_dataset(config.path) 
 
     vqgan_config = config.vqgan_config
@@ -487,7 +490,10 @@ def train(config_file):
     lr = config.lr
     epochs = config.epochs
 
+    # Load VQGAN
     model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+
+    # Load CLIP
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
     perceptor = perceptor.to(device)
     clip_size = config.get("clip_size", CLIP_SIZE.get(clip_model))
@@ -498,6 +504,9 @@ def train(config_file):
     noise_dim = config.noise_dim
     
     model_path = os.path.join(config.folder, "model.th")
+
+    # Build Model that will map text embedding to VQGAN latent space
+
     if os.path.exists(model_path):
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
@@ -584,8 +593,10 @@ def train(config_file):
     make_cutouts = MakeCutouts(
         cut_size=cut_size, cutn=cutn, 
         augs=config.get("augs"), 
-        pool=config.get("pool", True), pool_size=config.get("pool_size", clip_size),
-        interpolate=config.get("interpolate", False), interp_size=config.get("interp_size", clip_size),
+        pool=config.get("pool", True), 
+        pool_size=config.get("pool_size", clip_size),
+        interpolate=config.get("interpolate", False), 
+        interp_size=config.get("interp_size", clip_size),
     )
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
@@ -600,6 +611,9 @@ def train(config_file):
 
     diversity_mode = config.get("diversity_mode", "between_same_prompts")
 
+    """
+    Fast evaluation based on CLIP generate image/text similarity on some prompts
+    """
     if config.get("eval_path"):
         eval_data = load_dataset(config.eval_path) 
         eval_perceptor = load_clip_model(config.eval_clip_model).to(device) if config.get("eval_clip_model") else perceptor
@@ -678,13 +692,16 @@ def train(config_file):
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
             if l2_coef > 0:
+                # L2 loss
                 l2 = (z**2).mean()
             else:
                 l2 = torch.Tensor([0.]).to(device)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             #repeat*bs, 3, h, w
             xr = synth(model, z)
+
             if tv_coef > 0:
+                # Total variation loss
                 tv = tv_loss(xr)
             else:
                 tv = torch.Tensor([0.]).to(device)
@@ -722,6 +739,12 @@ def train(config_file):
             #dist between prompt features `H` and generated image features `embed`
             dists = target_loss_coef * ((H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean())
             if input_loss:
+                # If dataset provided is pairs of embeddings, we have source and target embeddings, which can
+                # typically be (text , image) pair embeddings.
+                # By default, in this case, we minimize the distance between generated image embeddings and target embeddings 
+                # (i.e, image embeddings) in the dataset. 
+                # We can also optionally minimize distance between generated image embeddings and source embeddings (i.e, text embeddings)
+                # in the datset by making `input_loss_coef` > 0
                 H = inp_feats.repeat(cutn, 1)
                 H = H.view(cutn, repeat, bs, clip_dim)
                 H = F.normalize(H, dim=-1)
@@ -730,8 +753,10 @@ def train(config_file):
                 dists += input_loss_coef * ((H.sub(embed).norm(dim=-1).div(2).arcsin().pow(2).mul(2)).mean())
             opt.zero_grad()
 
-            # 1) minimize distance between generated images CLIP features and text prompt features
+            # 1) minimize distance between generated images CLIP features and text/image prompt features
             # 2) maximize diversity of the generated images
+            # 3) L2 loss (optional)
+            # 4) Total Variation loss (optional)
             loss = dists  - config.diversity_coef * div  + l2_coef * l2 + tv_coef * tv
             loss.backward()
             if clip_grad_norm:
@@ -751,13 +776,22 @@ def train(config_file):
                 log_writer.add_scalar("dists", dists.item(), step)
                 log_writer.add_scalar("diversity", div.item(), step)
                 log_writer.add_scalar("l2", l2.item(), step)
+                log_writer.add_scalar("tv", tv.item(), step)
                 if use_wandb and step % wandb_log_interval == 0:
-                    log = {"avg_loss": avg_loss, "loss": loss.item(), "dists": dists.item(), "diversity": div.item()}
+                    log = {
+                        "avg_loss": avg_loss, 
+                        "loss": loss.item(), 
+                        "dists": dists.item(), 
+                        "diversity": div.item(), 
+                        "l2": l2.item(),
+                        "tv": tv.item(),
+                    }
                     wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f} tv:{tv.item()}")
                 if eval_data is not None:
+                    # Fast evaluation using CLIP text/image score/distance
                     bs = config.batch_size
                     eval_clip_score_list = []
                     eval_dists_list = []
@@ -944,6 +978,8 @@ def evaluate(
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
     It also optionally saves the generated images of the prompts.
+    Also, can optionally computed FID on the generated images using
+    the library `piq` (https://github.com/photosynthesis-team/piq).
 
     model_path: str
         path to model
@@ -1126,7 +1162,7 @@ def load_dataset(path):
 
 def load_clip_model(model_type, path=None):
     if model_type in ("cloob_rn50", "cloob_rn50x4"):
-        # CLOOB ckpts from original papers
+        # CLOOB ckpts from original paper
         perceptor = CLOOB(path=path).eval().requires_grad_(False)
     elif model_type in ("cloob_laion_400m_vit_b_16_16_epochs", "cloob_laion_400m_vit_b_16_32_epochs"):
         # CLOOB models trained by @crowsonkb on LAION
