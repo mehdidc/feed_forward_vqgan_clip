@@ -135,3 +135,5 @@ VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transform
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
 - Thanks to [@CJWBW](https://github.com/CJWBW) and [@andreasjansson](https://github.com/andreasjansson) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
 - Thanks to the authors of [CLOOB](https://github.com/ml-jku/cloob) for the code and the pre-trained models
+- Thanks to [@crowsonkb](https://github.com/crowsonkb), code/models for CLOOB pre-trained on LAION-400M are based on [cloob-training](https://github.com/crowsonkb/cloob-training)
+- Thanks to [OpenCLIP](https://github.com/mlfoundations/open_clip) authors for code/models for CLIP pre-trained on LAION-400M and LAION-2B
