@@ -137,3 +137,4 @@ VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transform
 - Thanks to the authors of [CLOOB](https://github.com/ml-jku/cloob) for the code and the pre-trained models
 - Thanks to [@crowsonkb](https://github.com/crowsonkb), code/models for CLOOB pre-trained on LAION-400M are based on [cloob-training](https://github.com/crowsonkb/cloob-training)
 - Thanks to [OpenCLIP](https://github.com/mlfoundations/open_clip) authors for code/models for CLIP pre-trained on LAION-400M and LAION-2B
+- Modes were trained on [JURECA-DC](https://www.fz-juelich.de/en/news/archive/press-release/2021/2021-06-23-jureca-dc) supercomputer at Jülich Supercomputing Centre (JSC), many thanks for the compute provided to train the models. 
