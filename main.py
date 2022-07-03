@@ -447,6 +447,8 @@ def tv_loss(Y_hat):
 
 
 def _fix_mlp_mixer_gelu_issue(net):
+    # Solving https://github.com/mehdidc/feed_forward_vqgan_clip/issues/25 for torch>=1.12
+    # Thanks to @neverix for the solution
     for l in net.mixer:
         if isinstance(l, torch.nn.Sequential):
             for k in l:
@@ -981,7 +983,7 @@ def train(config_file):
                 return
 
 
-def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None):
+def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None, prior_path:str=None):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -1002,6 +1004,9 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     
     images_per_row: int
         number of images per row in the grid of images
+    
+    prior_path: str
+        Path to flow, a model trained with `train_prior`, which generates image embeddings from text embeddings.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ckpt = torch.load(model_path, map_location="cpu")
@@ -1017,7 +1022,6 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         if net.config.model_type == "mlp_mixer":
             _fix_mlp_mixer_gelu_issue(net)
 
-
     net = net.to(device)    
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -1027,7 +1031,12 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     vq = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
     z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-    
+    if prior_path:
+        ckpt = torch.load(prior_path, map_location='cpu')
+        prior = build_prior_model(ckpt['config'], ckpt['input_size'], ckpt['output_size'])
+        prior.load_state_dict(ckpt['model'])
+        prior = prior.to(device)
+
     if text_or_path.endswith(".txt"):
         texts = [t.strip() for t in open(text_or_path).readlines()]
     else:
@@ -1038,6 +1047,10 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     if normalize_input:
         H = F.normalize(H, dim=1)
     H = H.repeat(nb_repeats, 1)
+    if prior_path:
+        H = H.view(len(H), -1, 1, 1)
+        H = prior.sample(H)
+        H = H.view(len(H), -1)
     noise_dim = config.noise_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
@@ -1159,7 +1172,6 @@ def evaluate(
         config = net.config
         if net.config.model_type == "mlp_mixer":
             _fix_mlp_mixer_gelu_issue(net)
-
 
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -1311,6 +1323,120 @@ def load_clip_model(model_type, path=None):
         perceptor = clip.load(model_type, jit=False)[0].eval().requires_grad_(False)
     return perceptor
 
+def train_prior(config_path):
+    from net2net.modules.flow.flatflow import ConditionalFlatCouplingFlow
+    from net2net.modules.flow.loss import NLL
+    use_horovod = USE_HOROVOD
+    if use_horovod:
+        hvd.init()
+        torch.cuda.set_device(hvd.local_rank())
+    config = OmegaConf.load(config_path)
+    config.folder = os.path.dirname(config_path)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if os.path.isdir(config.data.path):
+        paths = glob(os.path.join(config.data.path, "*"))
+        paths = sorted(paths)
+        random.shuffle(paths)
+        if use_horovod:
+            paths = [p for i, p in enumerate(paths) if i % hvd.size() == hvd.rank()]
+        xs = []
+        ys = []
+        for p in paths:
+            x, y = torch.load(p)
+            xs.append(x)
+            ys.append(y)
+        x = torch.cat(xs)
+        y = torch.cat(ys)
+    else:
+        x,y = torch.load(config.data.path)
+    hvd.join()
+    dataset = torch.utils.data.TensorDataset(x,y)
+    if use_horovod:
+        sampler = torch.utils.data.DistributedSampler(
+            dataset,
+            num_replicas=hvd.size(),
+            rank=hvd.rank(),
+        )
+        shuffle =  None
+    else:
+        sampler = None
+        shuffle = True
+    dataloader = torch.utils.data.DataLoader(
+        dataset, 
+        batch_size=config.data.batch_size,  
+        shuffle=shuffle,
+        sampler=sampler,
+    )
+
+    input_size = x.shape[1]
+    output_size  = y.shape[1]
+    checkpoint_path = os.path.join(config.folder, "checkpoint.th")
+    if os.path.exists(checkpoint_path):
+        print("Resuming")
+        ckpt = torch.load(model_path, map_location='cpu')
+        step = ckpt['step']
+        flow = build_prior_model(config, input_size, output_size)
+        flow.load_state_dict(ckpt['model'])
+        opt_state_dict = ckpt['opt']
+    else:
+        step = 0
+        flow = build_prior_model(config, input_size, output_size)
+        opt_state_dict = None
+    flow = flow.to(device)
+    get_loss = NLL()
+    params = flow.parameters()
+    opt = torch.optim.Adam(
+        params,
+        lr=config.optim.lr 
+    )
+    if opt_state_dict:
+        opt.load_state_dict(opt_state_dict)
+    if use_horovod:
+        hvd.broadcast_parameters(flow.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(opt, root_rank=0)
+    rank_zero = (use_horovod and hvd.rank() == 0) or not use_horovod
+    if rank_zero:
+        writer = SummaryWriter(config.folder)
+    for epoch in range(config.optim.epochs):
+        for inp, out in dataloader:
+            bs = len(inp)
+            inp = inp.to(device)
+            out = out.to(device)
+            inp = inp.view(bs, -1, 1, 1)
+            out = out.view(bs, -1, 1, 1)
+            zz, logdet = flow(out, inp)
+            loss, log_dict = get_loss(zz, logdet)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            if step % 100 == 0 and rank_zero:
+                for k, v in log_dict.items():
+                    writer.add_scalar(k, v.item(), step)
+            if step % config.logging.log_interval == 0 and rank_zero:
+                print(epoch, step, loss.item())
+                print(log_dict)
+                ckpt = {
+                    "model": flow.state_dict(),
+                    "step": step,
+                    "opt": opt.state_dict(),
+                    "input_size": input_size,
+                    "output_size": output_size,
+                    "config": config,
+                }
+                torch.save(ckpt, model_path)
+            step += 1
+
+def build_prior_model(config, input_size, output_size):
+    from net2net.modules.flow.flatflow import ConditionalFlatCouplingFlow
+    return ConditionalFlatCouplingFlow(
+        in_channels=output_size, 
+        conditioning_dim=input_size, 
+        embedding_dim=config.model.embedding_dim, 
+        hidden_dim=config.model.hidden_dim,
+        hidden_depth=config.model.hidden_depth,
+        n_flows=config.model.n_flows,
+    )
 
 if __name__ == "__main__":
     run([
@@ -1320,5 +1446,6 @@ if __name__ == "__main__":
         encode_images, 
         encode_text_and_images, 
         encode_text_and_images_webdataset, 
-        evaluate
+        evaluate,
+        train_prior,
     ])
