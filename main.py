@@ -446,6 +446,14 @@ def tv_loss(Y_hat):
                   torch.abs(Y_hat[:, :, :, 1:] - Y_hat[:, :, :, :-1]).mean())
 
 
+def _fix_mlp_mixer_gelu_issue(net):
+    for l in net.mixer:
+        if isinstance(l, torch.nn.Sequential):
+            for k in l:
+                k.fn[1].approximate = "none"
+    return net
+
+
 def build_model(config):
     clip_model = config.clip_model 
     clip_size = config.get("clip_size", CLIP_SIZE.get(clip_model))
@@ -570,6 +578,8 @@ def train(config_file):
         # backward compability
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
+        if net.config.model_type == "mlp_mixer":
+            _fix_mlp_mixer_gelu_issue(net)
     else:
         net = build_model(config)
         if os.path.exists(checkpoint_path):
@@ -1004,6 +1014,9 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         # model instance pickled, for backward compatiblity
         net = ckpt
         config = net.config
+        if net.config.model_type == "mlp_mixer":
+            _fix_mlp_mixer_gelu_issue(net)
+
 
     net = net.to(device)    
     vqgan_config = config.vqgan_config 
@@ -1144,6 +1157,9 @@ def evaluate(
         # backward compatibility
         net = ckpt
         config = net.config
+        if net.config.model_type == "mlp_mixer":
+            _fix_mlp_mixer_gelu_issue(net)
+
 
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
