@@ -229,23 +229,6 @@ class MakeCutouts(nn.Module):
             batch = torch.nn.functional.adaptive_avg_pool2d(batch, (self.interp_size, self.interp_size))
         return batch
 
-def encode_images(
-    pattern, *, clip_model="ViT-B/32", clip_path:str=None, out="features.pkl"
-):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    _, preprocess = clip.load("ViT-B/32", device=device, jit=False)
-    model = load_clip_model(clip_model, path=clip_path)
-    paths = glob(pattern)
-    features = []
-    for p in paths:
-        print(p)
-        image = preprocess(Image.open(p)).unsqueeze(0).to(device)
-        with torch.no_grad():
-            image_features = model.encode_image(image)
-        features.append(image_features.cpu())
-    features = torch.cat(features)
-    torch.save(features, out)
-
 def encode_text_and_images(
     folder, *, img_ext="jpg", text_ext="txt", out="features.pkl", 
     clip_model="ViT-B/32", 
@@ -1436,7 +1419,6 @@ if __name__ == "__main__":
         train, 
         test, 
         tokenize, 
-        encode_images, 
         encode_text_and_images, 
         encode_text_and_images_webdataset, 
         evaluate,
