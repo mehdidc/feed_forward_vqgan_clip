@@ -1362,6 +1362,7 @@ def train_prior(config_path):
     flow = flow.to(device)
     get_loss = NLL()
     params = flow.parameters()
+    clip_grad_norm = config.optim.get("clip_grad_norm")
     opt = torch.optim.Adam(
         params,
         lr=config.optim.lr 
@@ -1375,6 +1376,8 @@ def train_prior(config_path):
     if rank_zero:
         writer = SummaryWriter(config.folder)
     for epoch in range(config.optim.epochs):
+        if use_horovod:
+            sampler.set_epoch(epoch)
         for inp, out in dataloader:
             bs = len(inp)
             inp = inp.to(device)
@@ -1385,6 +1388,8 @@ def train_prior(config_path):
             loss, log_dict = get_loss(zz, logdet)
             opt.zero_grad()
             loss.backward()
+            if clip_grad_norm:
+                clip_grad_norm_(flow.parameters(), clip_grad_norm)
             opt.step()
             if step % 100 == 0 and rank_zero:
                 for k, v in log_dict.items():
@@ -1400,7 +1405,7 @@ def train_prior(config_path):
                     "output_size": output_size,
                     "config": config,
                 }
-                torch.save(ckpt, model_path)
+                torch.save(ckpt, checkpoint_path)
             step += 1
 
 def build_prior_model(config, input_size, output_size):
