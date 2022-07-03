@@ -1131,6 +1131,7 @@ def evaluate(
         inception_features = []
     
     net = load_model(model_path)
+    net.to(device)
     config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -1349,7 +1350,7 @@ def train_prior(config_path):
     checkpoint_path = os.path.join(config.folder, "checkpoint.th")
     if os.path.exists(checkpoint_path):
         print("Resuming")
-        ckpt = torch.load(model_path, map_location='cpu')
+        ckpt = torch.load(checkpoint_path, map_location='cpu')
         step = ckpt['step']
         flow = build_prior_model(config, input_size, output_size)
         flow.load_state_dict(ckpt['model'])
