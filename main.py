@@ -17,7 +17,6 @@ import json
 import numpy as np
 import kornia.augmentation as K
 import kornia
-import imageio
 
 import torch
 from torch import nn, optim
