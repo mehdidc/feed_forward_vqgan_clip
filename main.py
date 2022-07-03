@@ -445,6 +445,63 @@ def tv_loss(Y_hat):
     return 0.5 * (torch.abs(Y_hat[:, :, 1:, :] - Y_hat[:, :, :-1, :]).mean() +
                   torch.abs(Y_hat[:, :, :, 1:] - Y_hat[:, :, :, :-1]).mean())
 
+
+def build_model(config):
+    clip_model = config.clip_model 
+    clip_size = config.get("clip_size", CLIP_SIZE.get(clip_model))
+    clip_dim = config.get("clip_dim", CLIP_DIM.get(clip_model))
+    vq = load_vqgan_model(config.vqgan_config, config.vqgan_checkpoint)
+
+    vq_config = OmegaConf.load(config.vqgan_config)
+    vq_channels = vq_config.model.params.ddconfig.z_channels
+    vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
+    noise_dim = config.noise_dim
+
+    if config.model_type == "vitgan":
+        net = VitGAN(
+            initialize_size = vq_image_size//8, 
+            dropout = config.dropout, 
+            out_channels=vq_channels,
+            input_dim=clip_dim+noise_dim,
+            dim=config.dim,
+            num_heads=config.get("num_heads", 6),
+            blocks=config.depth,
+        )
+    elif config.model_type == "simple_vitgan":
+        net = SimpleVitGAN(
+            size=vq_image_size,
+            dropout = config.dropout, 
+            out_channels=vq_channels,
+            input_dim=clip_dim+noise_dim,
+            dim=config.dim,
+            num_heads=config.get("num_heads", 6),
+            blocks=config.depth,
+        )
+    elif config.model_type == "mlp_mixer":
+        net = Mixer(
+            input_dim=clip_dim+noise_dim, 
+            image_size=vq_image_size, 
+            channels=vq_channels, 
+            patch_size=1, 
+            dim=config.dim, 
+            depth=config.depth, 
+            dropout=config.dropout
+        )
+    elif config.model_type == "xtransformer":
+        net = XTransformer(
+            input_dim=clip_dim+noise_dim, 
+            image_size=vq_image_size, 
+            channels=vq_channels, 
+            dim=config.dim, 
+            depth=config.depth, 
+            heads=config.get("num_heads", 6),
+            initial_proj=config.get("initial_proj", True),
+            add_input=config.get("add_input", False)
+        )
+    else:
+        raise ValueError("model_type should be 'vitgan' or  'mlp_mixer' or 'xtransformer'")
+    return net
+
 def train(config_file):
 
     config = OmegaConf.load(config_file)
@@ -480,10 +537,8 @@ def train(config_file):
         lpips.load_from_pretrained()
         lpips = lpips.to(device)
 
-
     # Load dataset
     toks = load_dataset(config.path) 
-
     vqgan_config = config.vqgan_config
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model 
@@ -491,68 +546,39 @@ def train(config_file):
     epochs = config.epochs
 
     # Load VQGAN
-    model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+    vq = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
 
     # Load CLIP
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
     perceptor = perceptor.to(device)
     clip_size = config.get("clip_size", CLIP_SIZE.get(clip_model))
     clip_dim = config.get("clip_dim", CLIP_DIM.get(clip_model))
-    vq_channels = model.quantize.embedding.weight.shape[1]
+    vq_channels = vq.quantize.embedding.weight.shape[1]
 
     vq_image_size = config.get("vq_image_size", 16) # if bigger, resolution of generated image is bigger
     noise_dim = config.noise_dim
     
+    # Previously, the model instance was directly saved into `model.th`, keep support
+    # these for backward compatibility. 
+    # From now on, we rather save the state dict directly into `checkpoint.th`, with config, epoch and step
+    # information.
     model_path = os.path.join(config.folder, "model.th")
-
+    checkpoint_path = os.path.join(config.folder, "checkpoint.th")
+    
     # Build Model that will map text embedding to VQGAN latent space
-
     if os.path.exists(model_path):
+        # backward compability
         print(f"Resuming from {model_path}")
         net = torch.load(model_path, map_location="cpu")
     else:
-        if config.model_type == "vitgan":
-            net = VitGAN(
-                initialize_size = vq_image_size//8, 
-                dropout = config.dropout, 
-                out_channels=vq_channels,
-                input_dim=clip_dim+noise_dim,
-                dim=config.dim,
-                num_heads=config.get("num_heads", 6),
-                blocks=config.depth,
-            )
-        elif config.model_type == "simple_vitgan":
-            net = SimpleVitGAN(
-                size=vq_image_size,
-                dropout = config.dropout, 
-                out_channels=vq_channels,
-                input_dim=clip_dim+noise_dim,
-                dim=config.dim,
-                num_heads=config.get("num_heads", 6),
-                blocks=config.depth,
-            )
-        elif config.model_type == "mlp_mixer":
-            net = Mixer(
-                input_dim=clip_dim+noise_dim, 
-                image_size=vq_image_size, 
-                channels=vq_channels, 
-                patch_size=1, 
-                dim=config.dim, 
-                depth=config.depth, 
-                dropout=config.dropout
-            )
-        elif config.model_type == "xtransformer":
-            net = XTransformer(
-                input_dim=clip_dim+noise_dim, 
-                image_size=vq_image_size, 
-                channels=vq_channels, 
-                dim=config.dim, 
-                depth=config.depth, 
-                heads=config.get("num_heads", 6),
-                initial_proj=config.get("initial_proj", True),
-            )
-        else:
-            raise ValueError("model_type should be 'vitgan' or  'mlp_mixer' or 'xtransformer'")
+        net = build_model(config)
+        if os.path.exists(checkpoint_path):
+            # We load the state dict (current way, instead of saving/loading model instance)
+            print(f"Resuming model from checkpoint {checkpoint_path}...")
+            ckpt = torch.load(checkpoint_path, map_location="cpu")
+            net.load_state_dict(ckpt["state_dict"])
+            net.epoch = ckpt['epoch']
+            net.step = ckpt['step']
     net = net.to(device)
     if not hasattr(net, "step"):
         net.step = 0
@@ -561,14 +587,27 @@ def train(config_file):
     net.config = config
     opt = optim.Adam(net.parameters(), lr=lr)
     opt_path = os.path.join(config.folder, "opt.th")
+    # Load optimizer state
     if os.path.exists(opt_path):
         print(f"Resuming optimizer state from {opt_path}")
         opt.load_state_dict(torch.load(opt_path, map_location="cpu"))
+
+    # Load EMA (expoential moving average) parameters
     if use_ema:
+        # Support loading model instance for backward compability.
+        # From now on, we only state the state dict into `checkpoint_ema.th`.
         model_ema_path = os.path.join(config.folder, "model_ema.th")
+        checkpoint_ema_path = os.path.join(config.folder, "checkpoint_ema.th")
         if os.path.exists(model_ema_path):
+            # backward compability
             model_ema = torch.load(model_ema_path, map_location="cpu").to(device)
             ema = ExponentialMovingAverage(model_ema.parameters(), decay=ema_decay)
+        elif os.path.exists(checkpoint_ema_path):
+            # current way, use state dicts
+            ckpt = torch.load(checkpoint_ema_path, map_location='cpu')
+            net_ema = build_model(config)
+            net_ema.load_state_dict(ckpt['state_dict'])
+            ema = ExponentialMovingAverage(net.parameters(), decay=ema_decay) 
         else:
             ema = ExponentialMovingAverage(net.parameters(), decay=ema_decay)
         ema.to(device)
@@ -590,6 +629,8 @@ def train(config_file):
     std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     cutn = config.cutn
     cut_size = config.get("cut_size", clip_size)
+
+    # Data augmentation
     make_cutouts = MakeCutouts(
         cut_size=cut_size, cutn=cutn, 
         augs=config.get("augs"), 
@@ -598,11 +639,13 @@ def train(config_file):
         interpolate=config.get("interpolate", False), 
         interp_size=config.get("interp_size", clip_size),
     )
-    z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
-    z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
+    z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
+    z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     bs = config.batch_size
     repeat = config.repeat
     nb_noise = config.nb_noise
+    
+    # Load dataset
     if type(toks) == tuple:
         dataset = torch.utils.data.TensorDataset(*toks)
     else:
@@ -611,9 +654,7 @@ def train(config_file):
 
     diversity_mode = config.get("diversity_mode", "between_same_prompts")
 
-    """
-    Fast evaluation based on CLIP generate image/text similarity on some prompts
-    """
+    # Fast evaluation based on CLIP generate image/text similarity on some prompts
     if config.get("eval_path"):
         eval_data = load_dataset(config.eval_path) 
         eval_perceptor = load_clip_model(config.eval_clip_model).to(device) if config.get("eval_clip_model") else perceptor
@@ -627,7 +668,7 @@ def train(config_file):
             num_replicas=hvd.size(),
             rank=hvd.rank(),
         )
-        shuffle=  None
+        shuffle = None
     else:
         sampler = None
         shuffle = True
@@ -641,6 +682,8 @@ def train(config_file):
         if USE_HOROVOD:
             NOISE = hvd.broadcast(NOISE, root_rank=0)
         net.NOISE = NOISE
+    
+    # Training hyper-parameters
     input_loss = config.get("input_loss", False)
     input_loss_coef = config.get("input_loss_coef", 1)
     target_loss_coef = config.get("target_loss_coef", 1)
@@ -652,6 +695,7 @@ def train(config_file):
     tv_coef = config.get("tv_coef", 0.)
     tv_exponent = config.get("tv_exponent", 1.)
     logits_scale = eval_perceptor.logit_scale.exp().cpu() if eval_perceptor is not None else None
+    # Load scheduler
     if config.get("scheduler") is not None:
         if config.scheduler == "cosine":
             steps = config.max_steps
@@ -660,10 +704,25 @@ def train(config_file):
             raise ValueError(config.scheduler)
     else:
         scheduler = None
-    for epoch in range(epochs):
+
+    # Start training
+    for epoch in range(net.epoch, epochs):
         if USE_HOROVOD:
             sampler.set_epoch(epoch)
         for inp, out in dataloader:
+            # `inp``: text embedding or text tokens or image embedding
+            # `out`: text embedding or text tokens or image embedding
+            # For most cases, `inp` and `out` are just the same, e.g.,
+            # when the dataset is just a list of texts, `inp` and `out`
+            # are the same. But it is also possible to construct a dataset
+            # where `inp` is the text embeddings and `out` is the image embedding
+            # computed from a dataset.
+            # The model model takes `inp` as input, and generates an image.
+            # We then compute image embeddings from the generated image.
+            # Then, we minimize the distance between the image embeddings
+            # of the generated image and the embeddings of `inp` (text embeddings from dataset).
+            # Additionally (optional), we can also minimize the distance
+            # between the generated image embeddings and `out` (image embeddings from dataset).
             inp = inp.to(device)
             out = out.to(device)
             bs = len(inp)
@@ -687,24 +746,30 @@ def train(config_file):
                 inp_feats_net = torch.cat((inp_feats,noise),dim=1)
             else:
                 inp_feats_net = inp_feats
+            
+            # Use the model to predict the vqgan latent space `z`
             z = net(inp_feats_net)
             #bs, vq_channels, vq_image_size, vq_image_size
             z = z.contiguous()
             z = z.view(repeat*bs, vq_channels, vq_image_size, vq_image_size)
             if l2_coef > 0:
-                # L2 loss
+                # L2 loss (optional)
                 l2 = (z**2).mean()
             else:
                 l2 = torch.Tensor([0.]).to(device)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
+
+            # Generate the image from the VQGAN latent space
             #repeat*bs, 3, h, w
-            xr = synth(model, z)
+            xr = synth(vq, z)
 
             if tv_coef > 0:
-                # Total variation loss
+                # Total variation loss (optional)
                 tv = tv_loss(xr)
             else:
                 tv = torch.Tensor([0.]).to(device)
+
+            # Diversity loss
             if config.diversity_coef:
                 div = 0
                 for feats in lpips.net( (xr-mean)/std):
@@ -721,6 +786,9 @@ def train(config_file):
                         raise ValueError("diversity_mode should be 'between_same_prompts' lr 'all'")
             else:
                 div = torch.Tensor([0.]).to(device)
+
+            # Generate random augmentations from the generated images
+
             #cutn*repeat*bs,3,h,w
             x = make_cutouts(xr)
             x = (x-mean)/std
@@ -788,6 +856,8 @@ def train(config_file):
                     }
                     wandb.log(log)
             avg_loss = loss.item() * 0.01 + avg_loss * 0.99 
+            # Report progress
+
             if rank_zero and step % log_interval == 0:
                 print(f"epoch:{epoch:03d}, step:{step:05d}, avg_loss:{avg_loss:.3f}, loss:{loss.item():.3f}, dists:{dists.item():.3f}, div:{div.item():.3f}, l2:{l2.item():.3f} tv:{tv.item()}")
                 if eval_data is not None:
@@ -803,7 +873,7 @@ def train(config_file):
                         out_feats = text_emb
                         with torch.no_grad():
                             z = net(text_emb)
-                            xr_eval = synth(model, z)
+                            xr_eval = synth(vq, z)
                             xr_eval = torch.nn.functional.interpolate(xr_eval, size=(clip_size, clip_size), mode='bilinear')
                             xr_eval = (xr_eval - mean) / std
                             embed = eval_perceptor.encode_image(xr_eval).float() 
@@ -823,14 +893,18 @@ def train(config_file):
                     log_writer.add_scalar("eval_clip_score", eval_clip_score.item(), step)
                 else:
                     eval_dists = 0.0
+                # Saves generated images of current batch
                 grid = torchvision.utils.make_grid(xr.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'progress_{step:010d}.png'))
                 net.step = step
-                torch.save(net, model_path)
+                torch.save({"state_dict": net.state_dict(), "config": config, "step": step, "epoch": epoch}, checkpoint_path)
                 if use_ema:
                     with ema.average_parameters():
-                        torch.save(net, os.path.join(config.folder, "model_ema.th"))
+                        torch.save(
+                            {"state_dict": net.state_dict(), "config": config, "step": step, "epoch": epoch}, 
+                            checkpoint_ema_path
+                        )
                 torch.save(opt.state_dict(), os.path.join(config.folder, "opt.th"))
 
                 if inp.dtype == torch.long:
@@ -839,7 +913,8 @@ def train(config_file):
                         fd.write(text)
                     with open(os.path.join(config.folder, f"progress_{step:010d}.txt"), "w") as fd:
                         fd.write(text)
-                
+
+                # Saves generated images of a fixed batchs
                 inp_fixed_batch, out_fixed_batch = first_batch
                 out_fixed_batch = out_fixed_batch.to(device)
                 inp_fixed_batch = inp_fixed_batch.to(device)
@@ -861,7 +936,7 @@ def train(config_file):
                     z = z.view(len(z), vq_channels, vq_image_size, vq_image_size)
                     z = clamp_with_grad(z, z_min.min(), z_max.max())
                     #repeat*bs, 3, h, w
-                    xr_fixed_batch = synth(model, z)
+                    xr_fixed_batch = synth(vq, z)
                 grid = torchvision.utils.make_grid(xr_fixed_batch.cpu(), nrow=bs)
                 TF.to_pil_image(grid).save(os.path.join(config.folder, 'fixed_batch_progress.png'))
                 TF.to_pil_image(grid).save(os.path.join(config.folder, f'fixed_batch_progress_{step:010d}.png'))
@@ -871,6 +946,7 @@ def train(config_file):
                         fd.write(text)
 
                 if use_wandb:
+                    # Report on wandb (alternative to tensorboard)
                     caption = [decode(t.tolist()) for t in inp] if inp.dtype == torch.long else None
                     caption_fixed_batch = [decode(t.tolist()) for t in inp_fixed_batch] if inp_fixed_batch.dtype == torch.long else None
                     xr = xr.view(repeat, bs, xr.shape[1], xr.shape[2], xr.shape[3]).cpu()
@@ -889,6 +965,7 @@ def train(config_file):
                     model_artifact.add_file(model_path)
                     wandb_run.log_artifact(model_artifact)
             step += 1
+            # Posssbility to have fixed number of steps
             if config.get("max_steps") is not None and step >= config.max_steps:
                 # finish
                 return
@@ -917,16 +994,26 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         number of images per row in the grid of images
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    net = torch.load(model_path, map_location="cpu").to(device)
-    config = net.config
+    ckpt = torch.load(model_path, map_location="cpu")
+    if isinstance(ckpt, dict):
+        # checkpoint with state dict (preferred way now)
+        config = ckpt['config']
+        net = build_model(config)
+        net.load_state_dict(ckpt['state_dict'])
+    else:
+        # model instance pickled, for backward compatiblity
+        net = ckpt
+        config = net.config
+
+    net = net.to(device)    
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_model = config.clip_model
     perceptor = load_clip_model(clip_model, path=config.get("clip_model_path"))
     perceptor = perceptor.to(device)
-    model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-    z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
-    z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
+    vq = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+    z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
+    z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     
     if text_or_path.endswith(".txt"):
         texts = [t.strip() for t in open(text_or_path).readlines()]
@@ -938,7 +1025,7 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     if normalize_input:
         H = F.normalize(H, dim=1)
     H = H.repeat(nb_repeats, 1)
-    noise_dim = net.config.noise_dim
+    noise_dim = config.noise_dim
     if noise_dim:
         if hasattr(net, "NOISE"):
             noise = net.NOISE
@@ -954,7 +1041,7 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     with torch.no_grad():
         z = net(H)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
-        xr = synth(model, z)
+        xr = synth(vq, z)
     grid = torchvision.utils.make_grid(xr.cpu(), nrow=images_per_row if images_per_row else nb_repeats)
     TF.to_pil_image(grid).save(out_path)
 
@@ -964,14 +1051,13 @@ def evaluate(
     data_path, *, 
     batch_size:int=None, 
     out_folder=None, 
-    clip_threshold=40, 
+    clip_threshold=25, 
     nb_test:int=None, 
     save_images=False, 
     img_folder=None, 
     images_per_row=8, 
     seed=42, 
     clip_model="ViT-B/32",
-    image_callback=None,
     compute_fid=False,
     inception_features_real_path=None,
 ):
@@ -1017,6 +1103,19 @@ def evaluate(
     seed: int
         seed used to subsample the prompt dataset
     
+    clip_model: str
+        CLIP model to use for evaluation
+    
+    compute_fid: bool
+        whether to compute FID.
+        Needs the library ``.
+        Uses `inception_features_real_path` to get real data features.
+        Needs  PIQ library (https://github.com/photosynthesis-team/piq)
+
+    inception_features_real_path: str
+        path where real data features are stored for FID.
+        Only used if `compute_fid` is True.
+    
     """
  
     name = os.path.basename(data_path) + "_" + clip_model.replace("/", "_")
@@ -1035,8 +1134,17 @@ def evaluate(
         inception_features = []
     
 
-    net = torch.load(model_path, map_location="cpu").to(device)
-    config = net.config
+    ckpt = torch.load(model_path, map_location="cpu").to(device)
+    if isinstance(ckpt, dict):
+        # checkpoint, preferred way to load models
+        config = ckpt['config']
+        net = build_model(config)
+        net.load_state_dict(ckpt['state_dict'])
+    else:
+        # backward compatibility
+        net = ckpt
+        config = net.config
+
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
@@ -1047,9 +1155,9 @@ def evaluate(
     encoder = load_clip_model(config.clip_model, path=config.get("clip_model_path"))
     encoder = encoder.to(device)
 
-    model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
-    z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
-    z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
+    vq = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+    z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
+    z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     mean = torch.Tensor(CLIP_MEAN).view(1,-1,1,1).to(device)
     std = torch.Tensor(CLIP_STD).view(1,-1,1,1).to(device)
     
@@ -1067,7 +1175,7 @@ def evaluate(
     dataset = torch.utils.data.TensorDataset(toks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=0, shuffle=False)
     clip_scores_batches = []
-    noise_dim = net.config.noise_dim
+    noise_dim = config.noise_dim
     logits_scale = perceptor.logit_scale.exp().to(device)
     normalize_input = config.get("normalize_input", False)
     for batch_idx, (tok,) in enumerate(dataloader):
@@ -1091,7 +1199,7 @@ def evaluate(
             Hi = H
         z = net(Hi)
         z = clamp_with_grad(z, z_min.min(), z_max.max())
-        xr = synth(model, z)
+        xr = synth(vq, z)
         if compute_fid:
             f = inceptionv3(xr)
             f = f[0].view(len(xr), -1)
@@ -1176,8 +1284,9 @@ def load_clip_model(model_type, path=None):
         perceptor.encode_image = perceptor.image_encoder
         perceptor.encode_text = perceptor.text_encoder
     elif "openclip" in model_type:
-        import open_clip
+        # OpenCLIP models trained on LAION-400M, LAION-2B
         #e.g., openclip/ViT-B-32-quickgelu/laion400m_e32
+        import open_clip
         prefix, arch, dataset = model_type.split("/")
         perceptor, train_transform, eval_transform = open_clip.create_model_and_transforms(arch, pretrained=dataset)
         perceptor = perceptor.eval().requires_grad_(False)
