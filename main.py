@@ -1009,19 +1009,8 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
         Path to flow, a model trained with `train_prior`, which generates image embeddings from text embeddings.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ckpt = torch.load(model_path, map_location="cpu")
-    if isinstance(ckpt, dict):
-        # checkpoint with state dict (preferred way now)
-        config = ckpt['config']
-        net = build_model(config)
-        net.load_state_dict(ckpt['state_dict'])
-    else:
-        # model instance pickled, for backward compatiblity
-        net = ckpt
-        config = net.config
-        if net.config.model_type == "mlp_mixer":
-            _fix_mlp_mixer_gelu_issue(net)
-
+    net = load_model(model_path)
+    config = net.config
     net = net.to(device)    
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
@@ -1159,20 +1148,8 @@ def evaluate(
         inceptionv3 = InceptionV3().to(device)
         inception_features = []
     
-
-    ckpt = torch.load(model_path, map_location="cpu").to(device)
-    if isinstance(ckpt, dict):
-        # checkpoint, preferred way to load models
-        config = ckpt['config']
-        net = build_model(config)
-        net.load_state_dict(ckpt['state_dict'])
-    else:
-        # backward compatibility
-        net = ckpt
-        config = net.config
-        if net.config.model_type == "mlp_mixer":
-            _fix_mlp_mixer_gelu_issue(net)
-
+    net = load_model(model_path)
+    config = net.config
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
@@ -1280,6 +1257,22 @@ def evaluate(
     print(f"CLIP score mean: {mean}. CLIP score std:{std}")
     print(f"Fraction of images with a CLIP score of at least {clip_threshold}: {clip_score_atleast}")
     return dump
+
+def load_model(model_path):
+    ckpt = torch.load(model_path, map_location="cpu")
+    if isinstance(ckpt, dict):
+        # checkpoint, preferred way to load models
+        config = ckpt['config']
+        net = build_model(config)
+        net.load_state_dict(ckpt['state_dict'])
+        net.config = config
+    else:
+        # backward compatibility
+        net = ckpt
+        config = net.config
+        if net.config.model_type == "mlp_mixer":
+            _fix_mlp_mixer_gelu_issue(net)
+    return net
 
 def load_dataset(path):
     # path can be the following:
