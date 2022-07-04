@@ -437,6 +437,13 @@ def _fix_mlp_mixer_gelu_issue(net):
                 k.fn[1].approximate = "none"
     return net
 
+def _fix_vitgan_gelu_issue(net):
+    # Solving https://github.com/mehdidc/feed_forward_vqgan_clip/issues/25 for torch>=1.12
+    # Thanks to @neverix for the solution
+    for block in net.Transformer_Encoder.blocks:
+            block.mlp.activation.approximate = "none"
+    return net
+
 
 def build_model(config):
     clip_model = config.clip_model 
@@ -564,6 +571,8 @@ def train(config_file):
         net = torch.load(model_path, map_location="cpu")
         if net.config.model_type == "mlp_mixer":
             _fix_mlp_mixer_gelu_issue(net)
+        elif net.config.model_type == "vitgan":
+            _fix_vitgan_mixer_gelu_issue(net)
     else:
         net = build_model(config)
         if os.path.exists(checkpoint_path):
@@ -1251,6 +1260,9 @@ def load_model(model_path):
         config = net.config
         if net.config.model_type == "mlp_mixer":
             _fix_mlp_mixer_gelu_issue(net)
+        elif net.config.model_type == "vitgan":
+            _fix_vitgan_gelu_issue(net)
+            
     return net
 
 def load_dataset(path):
