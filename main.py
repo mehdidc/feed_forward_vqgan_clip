@@ -1347,6 +1347,7 @@ def train_prior(config_path):
 
     input_size = x.shape[1]
     output_size  = y.shape[1]
+    opt_path = os.path.join(config.folder, "opt.th")
     checkpoint_path = os.path.join(config.folder, "checkpoint.th")
     if os.path.exists(checkpoint_path):
         print("Resuming")
@@ -1354,10 +1355,12 @@ def train_prior(config_path):
         step = ckpt['step']
         flow = build_prior_model(config, input_size, output_size)
         flow.load_state_dict(ckpt['model'])
-        opt_state_dict = ckpt['opt']
     else:
         step = 0
         flow = build_prior_model(config, input_size, output_size)
+    if os.path.exists(opt_path):
+        opt_state_dict = torch.load(opt_path, map_location="cpu")
+    else:
         opt_state_dict = None
     flow = flow.to(device)
     get_loss = NLL()
@@ -1400,12 +1403,12 @@ def train_prior(config_path):
                 ckpt = {
                     "model": flow.state_dict(),
                     "step": step,
-                    "opt": opt.state_dict(),
                     "input_size": input_size,
                     "output_size": output_size,
                     "config": config,
                 }
                 torch.save(ckpt, checkpoint_path)
+                torch.save(opt.state_dict(), opt_path)
             step += 1
 
 def build_prior_model(config, input_size, output_size):
