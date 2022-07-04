@@ -1003,11 +1003,7 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
     if prior_path:
-        ckpt = torch.load(prior_path, map_location='cpu')
-        prior = build_prior_model(ckpt['config'], ckpt['input_size'], ckpt['output_size'])
-        prior.load_state_dict(ckpt['model'])
-        prior = prior.to(device)
-
+        prior = load_prior_model(prior_path).to(device)
     if text_or_path.endswith(".txt"):
         texts = [t.strip() for t in open(text_or_path).readlines()]
     else:
@@ -1410,6 +1406,12 @@ def train_prior(config_path):
                 torch.save(ckpt, checkpoint_path)
                 torch.save(opt.state_dict(), opt_path)
             step += 1
+
+def load_prior_model(prior_path):
+    ckpt = torch.load(prior_path, map_location='cpu')
+    prior = build_prior_model(ckpt['config'], ckpt['input_size'], ckpt['output_size'])
+    prior.load_state_dict(ckpt['model'])
+    return prior
 
 def build_prior_model(config, input_size, output_size):
     from net2net.modules.flow.flatflow import ConditionalFlatCouplingFlow
