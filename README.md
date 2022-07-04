@@ -16,6 +16,16 @@ the diversity of the generated images given the same prompt.
 
 # News
 
+- **04-07-2022**
+    - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)) ) released (see 0.4 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
+        - Two models (one for 256x256, one for 512x512) trained with [OpenCLIP](https://github.com/mlfoundations/open_clip) Vit-B/32  which was trained on [LAION-2B-en](https://huggingface.co/datasets/laion/laion2B-en)
+        - One model for ViT-B/32 trained with CLIP and pixel reconstruction
+    - Support [CLOOB](https://github.com/crowsonkb/cloob-training) models trained by @crowsonkb on LAION-400M
+    - Support Training/using priors to generate image embeddings from text embeddigs using [Net2Net](https://github.com/CompVis/net2net), can be used to generate multiple images  for the same text prompt
+    - Support L2 loss and Total variation losses as regularizations
+    - Support [OpenCLIP](https://github.com/mlfoundations/open_clip) models
+    - Support evaluation in the training phase
+    
 - **01-04-2022**
     - Support [CLOOB](https://github.com/ml-jku/cloob) as an alternative OpenAI's CLIP models
     - Support [X-transformer](https://github.com/lucidrains/x-transformers) as an alternative to MLP Mixer and VitGAN
@@ -56,6 +66,10 @@ source ./ff_vqgan_clip_venv/bin/activate
 $ (ff_vqgan_clip_venv) python -m pip install -r requirements.txt
 ```
 
+#### Optional requirements
+
+- If you want to use priors (see **04-07-2022** release), please install [Net2Net](https://github.com/CompVis/net2net), e.g. with `pip install git+https://github.com/CompVis/net2net`
+
 # How to use?
 
 
@@ -81,6 +95,17 @@ Loss will be output for tensorboard.
 ```
 
 ## Pre-trained models
+
+### Version 0.4
+
+| Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
+|----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
+|  cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256_v0.4.th)  | @mehdidc |
+|  cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th)  | @mehdidc |
+|  cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512_v0.4.th)  | @mehdidc |
+|  prior_cc12m_2x1024_openclip_laion2b_ViTB32   | Net2Net | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th)  | @mehdidc |
+|  prior_cc12m_2x1024_clip_ViTB32   | Net2Net | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_clip_ViTB32_v0.4.th)  | @mehdidc |
+
 
 ### version 0.3
 
