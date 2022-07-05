@@ -716,10 +716,10 @@ def train(config_file):
             # `inp``: text embedding or text tokens or image embedding
             # `out`: text embedding or text tokens or image embedding
             # For most cases, `inp` and `out` are just the same, e.g.,
-            # when the dataset is just a list of texts, `inp` and `out`
+            # when the dataset is just a list of prompts, `inp` and `out`
             # are the same. But it is also possible to construct a dataset
             # where `inp` is the text embeddings and `out` is the image embedding
-            # computed from a dataset.
+            # computed from a dataset of image-text pairs.
             # The model model takes `inp` as input, and generates an image.
             # We then compute image embeddings from the generated image.
             # Then, we minimize the distance between the image embeddings
