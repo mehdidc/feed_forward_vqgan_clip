@@ -33,6 +33,11 @@ PRIOR_MODEL = {
     "cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512_v0.4.th": "prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th"
 }
 DEFAULT_MODEL = "cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th"
+GRID_SIZES = [
+    "1x1",
+    "2x2",
+    "4x4",
+]
 
 class Predictor(cog.Predictor):
     def setup(self):
@@ -67,6 +72,7 @@ class Predictor(cog.Predictor):
     @cog.input("prompt", type=str, help="prompt for generating image")
     @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS+["random"], help="Model version")
     @cog.input("prior", type=bool, default=False, help="Use prior")
+    @cog.input("grid_size", type=str, default="1x1", options=GRID_SIZES, help="Use prior")
     def predict(self, prompt, model=DEFAULT_MODEL, prior=False):
         if model == "random":
             model = random.choice(list(self.nets.keys()))
@@ -76,6 +82,9 @@ class Predictor(cog.Predictor):
         clip_model_path = config.get("clip_model_path")
         vqgan_config = config.vqgan_config
         vqgan_checkpoint = config.vqgan_checkpoint
+        grid_size_h, grid_size_h = grid_size.split("x")
+        grid_size_h = int(grid_size_h)
+        grid_size_w = int(grid_size_w)
         toks = clip.tokenize([prompt], truncate=True)
         perceptor = self.perceptors[(clip_model, clip_model_path)]
         vqgan, z_min, z_max = self.vqgans[(vqgan_config, vqgan_checkpoint)]
@@ -83,6 +92,7 @@ class Predictor(cog.Predictor):
             prior_model = self.priors[PRIOR_MODEL[model]]
         with torch.no_grad():
             H = perceptor.encode_text(toks.to(self.device)).float()
+            H = H.repeat(grid_size_h*grid_size_w, 1)
             if prior:
                 H = H.view(len(H), -1, 1, 1)
                 H = prior_model.sample(H)
@@ -90,7 +100,7 @@ class Predictor(cog.Predictor):
             z = net(H)
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             xr = synth(vqgan, z)
-        grid = torchvision.utils.make_grid(xr.cpu(), nrow=len(xr))
+        grid = torchvision.utils.make_grid(xr.cpu(), nrow=grid_size_h)
         out_path = Path(tempfile.mkdtemp()) / "out.png"
         torchvision.transforms.functional.to_pil_image(grid).save(out_path)
         return out_path
