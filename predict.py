@@ -20,11 +20,11 @@ MODELS = [
     "cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512_v0.4.th",
 ]
 PRIOR_MODEL = {
-    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.1.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th"
-    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.2.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th"
-    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.2.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th"
-    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th"
-    "cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th"
+    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.1.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
+    "cc12m_32x1024_vitgan_clip_ViTB32_256x256_v0.2.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
+    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.2.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
+    "cc12m_32x1024_mlp_mixer_clip_ViTB32_256x256_v0.3.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
+    "cc12m_32x1024_mlp_mixer_cloob_rn50_256x256_v0.3.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
     "cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
     "cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256_v0.4.th": "prior_cc12m_2x1024_clip_ViTB32_v0.4.th",
     "cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th": "prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th",
