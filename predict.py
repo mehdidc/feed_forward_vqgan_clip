@@ -76,7 +76,7 @@ class Predictor(cog.BasePredictor):
         prompt:str=cog.Input(description="prompt for generating image"), 
         model:str=cog.Input(description="Model", default=DEFAULT_MODEL,choices=MODELS+["random"]), 
         prior:bool=cog.Input(description="Use prior", default=False),
-        grid_size=cog.Input(description="Grid size", default="1x1", choices=GRID_SIZES), 
+        grid_size:int=cog.Input(description="Grid size", default="1x1", choices=GRID_SIZES), 
         seed=cog.Input(description="Seed", default=0)
     ) -> cog.Path:
         torch.manual_seed(seed)
