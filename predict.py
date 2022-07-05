@@ -37,9 +37,11 @@ GRID_SIZES = [
     "1x1",
     "2x2",
     "4x4",
+    "8x8",
 ]
 
-class Predictor(cog.Predictor):
+class Predictor(cog.BasePredictor):
+
     def setup(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.nets = {
@@ -69,12 +71,14 @@ class Predictor(cog.Predictor):
             if PRIOR_MODEL[path] not in self.priors:
                 self.priors[PRIOR_MODEL[path]] = load_prior_model(PRIOR_MODEL[path]).to(self.device)
 
-    @cog.input("prompt", type=str, help="prompt for generating image")
-    @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS+["random"], help="Model version")
-    @cog.input("prior", type=bool, default=False, help="Use prior")
-    @cog.input("grid_size", type=str, default="1x1", options=GRID_SIZES, help="Grid size")
-    @cog.input("seed", type=int, default=0, help="Seed")
-    def predict(self, prompt, model=DEFAULT_MODEL, prior=False, grid_size="1x1", seed=0):
+    def predict(
+        self, 
+        prompt:str=cog.Input(description="prompt for generating image"), 
+        model:str=cog.Input(description="Model", default=DEFAULT_MODEL,choices=MODELS+["random"]), 
+        prior:bool=cog.Input(description="Use prior", default=False),
+        grid_size=cog.Input(description="Grid size", default="1x1", choices=GRID_SIZES), 
+        seed=cog.Input(description="Seed", default=0)
+    ) -> cog.Path:
         torch.manual_seed(seed)
         random.seed(seed)
         if model == "random":
@@ -104,6 +108,6 @@ class Predictor(cog.Predictor):
             z = clamp_with_grad(z, z_min.min(), z_max.max())
             xr = synth(vqgan, z)
         grid = torchvision.utils.make_grid(xr.cpu(), nrow=grid_size_h)
-        out_path = Path(tempfile.mkdtemp()) / "out.png"
+        out_path = cog.Path(tempfile.mkdtemp()) / "out.png"
         torchvision.transforms.functional.to_pil_image(grid).save(out_path)
         return out_path
