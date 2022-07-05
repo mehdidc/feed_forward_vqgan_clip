@@ -72,7 +72,7 @@ class Predictor(cog.Predictor):
     @cog.input("prompt", type=str, help="prompt for generating image")
     @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS+["random"], help="Model version")
     @cog.input("prior", type=bool, default=False, help="Use prior")
-    @cog.input("grid_size", type=str, default="1x1", options=GRID_SIZES, help="Grid size")
+    @cog.input("gridsize", type=str, default="1x1", options=GRID_SIZES, help="Grid size")
     @cog.input("seed", type=int, default=0, help="Seed")
     def predict(self, prompt, model=DEFAULT_MODEL, prior=False):
         torch.manual_seed(seed)
@@ -85,7 +85,7 @@ class Predictor(cog.Predictor):
         clip_model_path = config.get("clip_model_path")
         vqgan_config = config.vqgan_config
         vqgan_checkpoint = config.vqgan_checkpoint
-        grid_size_h, grid_size_w = grid_size.split("x")
+        grid_size_h, grid_size_w = gridsize.split("x")
         grid_size_h = int(grid_size_h)
         grid_size_w = int(grid_size_w)
         toks = clip.tokenize([prompt], truncate=True)
