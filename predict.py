@@ -73,7 +73,10 @@ class Predictor(cog.Predictor):
     @cog.input("model", type=str, default=DEFAULT_MODEL, options=MODELS+["random"], help="Model version")
     @cog.input("prior", type=bool, default=False, help="Use prior")
     @cog.input("grid_size", type=str, default="1x1", options=GRID_SIZES, help="Grid size")
+    @cog.input("seed", type=int, default=0, help="Seed")
     def predict(self, prompt, model=DEFAULT_MODEL, prior=False):
+        torch.manual_seed(seed)
+        random.seed(seed)
         if model == "random":
             model = random.choice(list(self.nets.keys()))
         net = self.nets[model]
