@@ -77,7 +77,7 @@ class Predictor(cog.BasePredictor):
         model:str=cog.Input(description="Model", default=DEFAULT_MODEL,choices=MODELS+["random"]), 
         prior:bool=cog.Input(description="Use prior", default=False),
         grid_size:str=cog.Input(description="Grid size", default="1x1", choices=GRID_SIZES), 
-        seed=cog.Input(description="Seed", default=0)
+        seed:int=cog.Input(description="Seed", default=0)
     ) -> cog.Path:
         torch.manual_seed(seed)
         random.seed(seed)
