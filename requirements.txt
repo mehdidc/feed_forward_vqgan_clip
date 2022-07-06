@@ -22,3 +22,4 @@ torchtext
 entmax
 x-transformers==0.19.1
 open_clip_torch
+git+https://github.com/CompVis/net2net
