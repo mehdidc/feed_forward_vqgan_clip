@@ -100,11 +100,11 @@ Loss will be output for tensorboard.
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
-|  cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256_v0.4.th)  | @mehdidc |
-|  cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th)  | @mehdidc |
-|  cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512   | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512_v0.4.th)  | @mehdidc |
-|  prior_cc12m_2x1024_openclip_laion2b_ViTB32   | Net2Net | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th)  | @mehdidc |
-|  prior_cc12m_2x1024_clip_ViTB32   | Net2Net | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_clip_ViTB32_v0.4.th)  | @mehdidc |
+|  cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256   | MLPMixer | 1.2GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_clip_ViTB32_pixelrecons_256x256_v0.4.th)  | @mehdidc |
+|  cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256   | MLPMixer | 1.2GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th)  | @mehdidc |
+|  cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512   | MLPMixer | 580MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_1x1024_mlp_mixer_openclip_laion2b_ViTB32_512x512_v0.4.th)  | @mehdidc |
+|  prior_cc12m_2x1024_openclip_laion2b_ViTB32   | Net2Net | 964MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th)  | @mehdidc |
+|  prior_cc12m_2x1024_clip_ViTB32   | Net2Net | 964MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_clip_ViTB32_v0.4.th)  | @mehdidc |
 
 
 ### version 0.3
@@ -151,16 +151,15 @@ Using the notebook you can generate images from pre-trained models and do interp
 
 # Acknowledgements
 
-- The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks
-to all the authors who contributed to the notebook ([@crowsonkb](https://github.com/crowsonkb), [@advadnoun](https://twitter.com/advadnoun), [@Eleiber](https://github.com/Eleiber), [@Crimeacs](https://twitter.com/earthml1), @Abulafia)
+- The training code is heavily based on the VQGAN-CLIP notebook <https://colab.research.google.com/drive/1ZAus_gn2RhTZWzOWUpPERNC0Q8OhZRTZ>, thanks to all the authors who contributed to the notebook ([@crowsonkb](https://github.com/crowsonkb), [@advadnoun](https://twitter.com/advadnoun), [@Eleiber](https://github.com/Eleiber), [@Crimeacs](https://twitter.com/earthml1), @Abulafia)
 - Thanks to [@lucidrains](https://github.com/lucidrains), the MLP mixer model (`mlp_mixer_pytorch.py`)  is from <https://github.com/lucidrains/mlp-mixer-pytorch>.
-- Thanks to Taming Transformers authors <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
+- Thanks to CompVis for Taming Transformers <https://github.com/CompVis/taming-transformers>, the code uses VQGAN pre-trained model and
 VGG16 feature space perceptual loss <https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py>
 - Thanks to [@afiaka87](https://github.com/afiaka87) for all the contributions to the repository's code and for providing the blog captions dataset for experimentation
 - Thanks to VitGAN authors, the VitGAN model is from <https://github.com/wilile26811249/ViTGAN>
-- Thanks to [@chenxwh](https://github.com/chenxwh) and [@andreasjansson](https://github.com/andreasjansson) from [Replicate AI](https://replicate.ai/home) for making and hosting a browser based text to image interface using the model
+- Thanks to [Replicate AI](https://replicate.ai/home) team, especially [@chenxwh](https://github.com/chenxwh) and [@andreasjansson](https://github.com/andreasjansson) for making and hosting a browser based text to image interface using the model and for all the support
 - Thanks to the authors of [CLOOB](https://github.com/ml-jku/cloob) for the code and the pre-trained models
 - Thanks to [@crowsonkb](https://github.com/crowsonkb), code/models for CLOOB pre-trained on LAION-400M are based on [cloob-training](https://github.com/crowsonkb/cloob-training)
 - Thanks to [OpenCLIP](https://github.com/mlfoundations/open_clip) authors for CLIP-like code/models pre-trained on LAION-400M and LAION-2B
-- Thanks to CompVis's net2net (https://github.com/CompVis/net2net), it was used to train text to image embedding priors
+- Thanks to CompVis's Net2Net (https://github.com/CompVis/net2net), it was used to train text to image embedding priors
 - Models were trained on [JURECA-DC](https://www.fz-juelich.de/en/news/archive/press-release/2021/2021-06-23-jureca-dc) supercomputer at Jülich Supercomputing Centre (JSC), many thanks for the compute provided to train the models. 
