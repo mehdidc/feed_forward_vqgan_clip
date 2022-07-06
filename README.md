@@ -129,8 +129,9 @@ After downloading a model or finishing training your own model, you can test it 
 - `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th`
 - `python -u main.py test cc12m_32x1024_vitgan.th "Picture of a futuristic snowy city during the night, the tree is lit with a lantern"`
 
+<p align="center">
 ![](images/snowy_city.png)
-
+</p>
 
 You can also use the priors to generate multiple images for the same text prompt:
 
@@ -138,7 +139,9 @@ You can also use the priors to generate multiple images for the same text prompt
 - `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th`
 - `python main.py test pretrained_models/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th "bedroom from 1700" --prior-path=pretrained_models/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th --nb-repeats=4 --images-per-row=4`
 
+<p align="center">
 ![](images/bedroom_from_1700.png)
+</p>
 
 ### Version 0.1
 
