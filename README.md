@@ -124,23 +124,6 @@ Loss will be output for tensorboard.
 | cc12m_32x1024  | MLPMixer | 1.19GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_mlp_mixer.th) | @mehdidc |
 | cc12m_32x1024  | VitGAN | 1.55GB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th) | @mehdidc |
 
-After downloading a model or finishing training your own model, you can test it with new prompts:
-
-- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th`
-- `python -u main.py test cc12m_32x1024_vitgan.th "Picture of a futuristic snowy city during the night, the tree is lit with a lantern"`
-
-<p align="center">
-<img src="images/snowy_city.png">
-</p>
-
-You can also use the priors to generate multiple images for the same text prompt:
-
-- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th`
-- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th`
-- `python main.py test pretrained_models/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th "bedroom from 1700" --prior-path=pretrained_models/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th --nb-repeats=4 --images-per-row=4`
-
-![](images/bedroom_from_1700.png)
-
 ### Version 0.1
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
@@ -155,9 +138,26 @@ You can also use the priors to generate multiple images for the same text prompt
 
 NB: cc12m_AxB means a model trained on conceptual captions 12M, with depth A and hidden state dimension B
 
+## How to generate images ?
 
-You can also try it in the [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing).
-Using the notebook you can generate images from pre-trained models and do interpolations between text prompts to create videos, see for instance [video 1](https://www.youtube.com/watch?v=8_EHeW5YIpk) or [video 2](https://www.youtube.com/watch?v=sl3gCli2R7g) or [video 3](https://www.youtube.com/watch?v=8dSiv96_2Vc)
+After downloading a model (see Pre-trained models available) or finishing training your own model, you can test it with new prompts, e.g.:
+
+- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.2/cc12m_32x1024_vitgan.th`
+- `python -u main.py test cc12m_32x1024_vitgan.th "Picture of a futuristic snowy city during the night, the tree is lit with a lantern"`
+
+<p align="center">
+<img src="images/snowy_city.png">
+</p>
+
+You can also use the priors to generate multiple images for the same text prompt, e.g.:
+
+- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th`
+- `wget https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th`
+- `python main.py test pretrained_models/0.4/cc12m_32x1024_mlp_mixer_openclip_laion2b_ViTB32_256x256_v0.4.th "bedroom from 1700" --prior-path=pretrained_models/0.4/prior_cc12m_2x1024_openclip_laion2b_ViTB32_v0.4.th --nb-repeats=4 --images-per-row=4`
+
+![](images/bedroom_from_1700.png)
+
+You can also try all the models in the [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and in [Replicate](https://replicate.com/mehdidc/feed_forward_vqgan_clip). Using the notebook, you can generate images from pre-trained models and do interpolations between text prompts to create videos, see for instance [video 1](https://www.youtube.com/watch?v=8_EHeW5YIpk) or [video 2](https://www.youtube.com/watch?v=sl3gCli2R7g) or [video 3](https://www.youtube.com/watch?v=8dSiv96_2Vc).
 
 # Acknowledgements
 
