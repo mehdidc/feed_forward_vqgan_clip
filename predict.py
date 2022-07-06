@@ -40,12 +40,25 @@ GRID_SIZES = [
     "8x8",
 ]
 
+def download_and_load_model(model_path):
+    download_from_path(model_path)
+    return load_model(model_path)
+
+def download_and_load_prior_model(model_path):
+    download_from_path(model_path)
+    return load_prior_model(model_path)
+
+def download_from_path(path):
+    from download_weights import download, model_url
+    download(model_url[path], target=path)
+    
+
 class Predictor(cog.BasePredictor):
 
     def setup(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.nets = {
-            model_path: load_model(model_path).cpu()
+            model_path: download_and_load_model(model_path).cpu()
             for model_path in MODELS
         }
         self.priors = {}
@@ -69,7 +82,7 @@ class Predictor(cog.BasePredictor):
                 self.vqgans[(vqgan_config, vqgan_checkpoint)] = model, z_min, z_max
             # Load PRIOR model if not already done
             if PRIOR_MODEL[path] not in self.priors:
-                self.priors[PRIOR_MODEL[path]] = load_prior_model(PRIOR_MODEL[path]).cpu()
+                self.priors[PRIOR_MODEL[path]] = download_and_load_prior_model(PRIOR_MODEL[path]).cpu()
 
     def predict(
         self, 
