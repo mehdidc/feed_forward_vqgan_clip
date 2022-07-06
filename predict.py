@@ -8,6 +8,7 @@ import torch
 from PIL import Image
 import clip
 import torchvision
+from functools import lru_cache
 from main import load_vqgan_model, CLIP_DIM, clamp_with_grad, synth, load_clip_model, load_model, load_prior_model
 
 MODELS = [
@@ -40,37 +41,30 @@ GRID_SIZES = [
     "8x8",
 ]
 
+@lru_cache(maxsize=3)
+def cached_load_model(path, device):
+    return load_model(path).eval().requires_grad_(False).to(device)
+
+@lru_cache(maxsize=2)
+def cached_load_clip_model(clip_model, model_path, device):
+    return load_clip_model(clip_model, path=model_path).eval().requires_grad_(False).to(device)
+
+@lru_cache(maxsize=2)
+def cached_load_prior_model(path, device):
+    return load_prior_model(path).eval().requires_grad_(False).to(device)
+
+@lru_cache(maxsize=1)
+def cached_load_vqgan_model(vqgan_config, vqgan_checkpoint, device):
+    vq = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(device)
+    z_min = vq.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
+    z_max = vq.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
+    return vq, z_min, z_max
+
 class Predictor(cog.BasePredictor):
 
     def setup(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.nets = {
-            model_path: load_model(model_path).to(self.device)
-            for model_path in MODELS
-        }
-        self.priors = {}
-        self.perceptors = {}
-        self.vqgans = {}
-        for path, net in self.nets.items():
-            config = net.config
-            vqgan_config = config.vqgan_config
-            vqgan_checkpoint = config.vqgan_checkpoint
-            clip_model = config.clip_model
-            clip_model_path = config.get("clip_model_path")
-            # Load CLIP model if not already done 
-            if (clip_model, clip_model_path) not in self.perceptors:
-                perceptor = load_clip_model(clip_model, path=clip_model_path).eval().requires_grad_(False).to(self.device)
-                self.perceptors[(clip_model, clip_model_path)] = perceptor
-            # Load VQGAN model if not already done
-            if (vqgan_config, vqgan_checkpoint) not in self.vqgans:
-                model = load_vqgan_model(vqgan_config, vqgan_checkpoint).to(self.device)
-                z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
-                z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-                self.vqgans[(vqgan_config, vqgan_checkpoint)] = model, z_min, z_max
-            # Load PRIOR model if not already done
-            if PRIOR_MODEL[path] not in self.priors:
-                self.priors[PRIOR_MODEL[path]] = load_prior_model(PRIOR_MODEL[path]).to(self.device)
-
+   
     def predict(
         self, 
         prompt:str=cog.Input(description="prompt for generating image"), 
@@ -83,7 +77,7 @@ class Predictor(cog.BasePredictor):
         random.seed(seed)
         if model == "random":
             model = random.choice(list(self.nets.keys()))
-        net = self.nets[model]
+        net = cached_load_model(model, self.device)
         config = net.config
         clip_model = config.clip_model
         clip_model_path = config.get("clip_model_path")
@@ -93,10 +87,10 @@ class Predictor(cog.BasePredictor):
         grid_size_h = int(grid_size_h)
         grid_size_w = int(grid_size_w)
         toks = clip.tokenize([prompt], truncate=True)
-        perceptor = self.perceptors[(clip_model, clip_model_path)]
-        vqgan, z_min, z_max = self.vqgans[(vqgan_config, vqgan_checkpoint)]
+        perceptor = cached_load_clip_model(clip_model, clip_model_path, self.device)
+        vqgan, z_min, z_max = cached_load_vqgan_model(vqgan_config, vqgan_checkpoint, self.device)
         if prior:
-            prior_model = self.priors[PRIOR_MODEL[model]]
+            prior_model = cached_load_prior_model(PRIOR_MODEL[model], self.device)
         with torch.no_grad():
             H = perceptor.encode_text(toks.to(self.device)).float()
             H = H.repeat(grid_size_h*grid_size_w, 1)
