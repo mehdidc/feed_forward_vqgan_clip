@@ -108,7 +108,7 @@ Loss will be output for tensorboard.
 |  prior_cc12m_2x1024_clip_ViTB32   | Net2Net | 964MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.4/prior_cc12m_2x1024_clip_ViTB32_v0.4.th)  | @mehdidc |
 
 
-### version 0.3
+### Version 0.3
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
@@ -117,7 +117,7 @@ Loss will be output for tensorboard.
 |  cc12m_256x16_xtransformer_clip_ViTB32_512x512  | Transformer | 571MB  | Conceptual captions 12M | [Download](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th) | @mehdidc |
 
 
-### version 0.2
+### Version 0.2
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
@@ -132,7 +132,7 @@ After downloading a model or finishing training your own model, you can test it 
 
 ![](images/snowy_city.png)
 
-### version 0.1
+### Version 0.1
 
 | Name           | Type   | Size    | Dataset                 | Link                                                                                            | Author   |
 |----------------|--------|---------|-------------------------|-------------------------------------------------------------------------------------------------|----------|
