@@ -17,9 +17,10 @@ the diversity of the generated images given the same prompt.
 # News
 
 - **04-07-2022**
-    - Version 0.4 released: new models that can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)). See also the release [here](https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
+    - Version 0.4 released: new models that can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)):
         - Two models (one for 256x256, one for 512x512) trained with [OpenCLIP](https://github.com/mlfoundations/open_clip) Vit-B/32  which was trained on [LAION-2B-en](https://huggingface.co/datasets/laion/laion2B-en)
         - One model for ViT-B/32 trained with CLIP and pixel reconstruction
+        -  See the release [here](https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
     - Support [CLOOB](https://github.com/crowsonkb/cloob-training) models trained by [@crowsonkb](https://github.com/crowsonkb) on LAION-400M
     - Support Training/using priors to generate image embeddings from text embeddigs using [Net2Net](https://github.com/CompVis/net2net), can be used to generate multiple images  for the same text prompt
     - Support L2 loss and Total variation losses as regularizations
