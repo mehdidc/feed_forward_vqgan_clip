@@ -974,7 +974,7 @@ def train(config_file):
                 return
 
 
-def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None, prior_path:str=None):
+def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None, prior_path:str=None, seed:int=None):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -998,7 +998,13 @@ def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_p
     
     prior_path: str
         Path to flow, a model trained with `train_prior`, which generates image embeddings from text embeddings.
+    
+    seed: int
     """
+    if seed is not None:
+        torch.manual_seed(seed)
+        random.seed(seed)
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = load_model(model_path)
     config = net.config
