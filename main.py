@@ -1080,7 +1080,7 @@ def evaluate(
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
     It also optionally saves the generated images of the prompts.
-    Also, can optionally computed FID on the generated images using
+    Also, can optionally compute FID on the generated images using
     the library `piq` (https://github.com/photosynthesis-team/piq).
 
     model_path: str
