@@ -974,7 +974,14 @@ def train(config_file):
                 return
 
 
-def test(model_path, text_or_path, *, nb_repeats=1, out_path="gen.png", images_per_row:int=None, prior_path:str=None, seed:int=None):
+def test(
+    model_path, text_or_path, *, 
+    nb_repeats=1, 
+    out_path="gen.png", 
+    images_per_row:int=None, 
+    prior_path:str=None,
+    seed:int=None,
+):
     """
     generated an image or a set of images from a model given a text prompt
 
@@ -1067,7 +1074,8 @@ def evaluate(
     seed=42, 
     clip_model="ViT-B/32",
     compute_fid=False,
-    inception_features_real_path=None,
+    inception_features_real_path:str=None,
+    prior_path:str=None,
 ):
     """
     Evaluate the CLIP score of a model on a dataset of prompts.
@@ -1124,6 +1132,8 @@ def evaluate(
         path where real data features are stored for FID.
         Only used if `compute_fid` is True.
     
+    prior_path: str
+        Use prior for evaluation
     """
  
     name = os.path.basename(data_path) + "_" + clip_model.replace("/", "_")
@@ -1147,7 +1157,9 @@ def evaluate(
     vqgan_config = config.vqgan_config 
     vqgan_checkpoint = config.vqgan_checkpoint
     clip_size = CLIP_SIZE[clip_model]
-    
+    if prior_path:
+        prior = load_prior_model(prior_path).to(device)
+
     perceptor = load_clip_model(clip_model)
     perceptor = perceptor.to(device)
 
@@ -1165,6 +1177,8 @@ def evaluate(
         batch_size = config.batch_size
         
     np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
     if nb_test:
         inds = np.arange(len(toks))
         np.random.shuffle(inds)
@@ -1180,6 +1194,10 @@ def evaluate(
     for batch_idx, (tok,) in enumerate(dataloader):
         tok = tok.to(device)
         H = encoder.encode_text(tok).float()
+        if prior_path:
+            H = H.view(len(H), -1, 1, 1)
+            H = prior.sample(H)
+            H = H.view(len(H), -1)
         if normalize_input:
             H = F.normalize(H, dim=1)
         if noise_dim:
