@@ -815,7 +815,7 @@ def train(config_file):
                 # By default, in this case, we minimize the distance between generated image embeddings and target embeddings 
                 # (i.e, image embeddings) in the dataset. 
                 # We can also optionally minimize distance between generated image embeddings and source embeddings (i.e, text embeddings)
-                # in the datset by making `input_loss_coef` > 0
+                # in the dataset by making `input_loss_coef` > 0
                 H = inp_feats.repeat(cutn, 1)
                 H = H.view(cutn, repeat, bs, clip_dim)
                 H = F.normalize(H, dim=-1)
