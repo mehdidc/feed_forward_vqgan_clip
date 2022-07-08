@@ -22,7 +22,7 @@ the diversity of the generated images given the same prompt.
         - One model for ViT-B/32 trained with CLIP and pixel reconstruction
     - Update [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) with easy to use widgets for image and video generation
     - Support [CLOOB](https://github.com/crowsonkb/cloob-training) models trained by [@crowsonkb](https://github.com/crowsonkb) on [LAION-400M](https://laion.ai/blog/laion-400-open-dataset/)
-    - Support Training/using priors to generate image embeddings from text embeddigs using [Net2Net](https://github.com/CompVis/net2net), can be used to generate multiple images  for the same text prompt
+    - Support Training/using **priors** to generate image embeddings from text embeddigs using [Net2Net](https://github.com/CompVis/net2net), this can be used to generate multiple images for the same text prompt. See [here](#generate-images) for an example. Also available in the [Colab Notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip).
     - Support L2 loss and Total variation losses as regularizations
     - Support [OpenCLIP](https://github.com/mlfoundations/open_clip) models
     - Support evaluation in the training phase
