@@ -16,7 +16,7 @@ the diversity of the generated images given the same prompt.
 
 # News
 
-- **04-08-2022**
+- **08 July 2022**
     - [Version 0.4](https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models) released. New models that can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip):
         - Two models (one for 256x256 resolution, one for 512x512 resolution) trained with [OpenCLIP](https://github.com/mlfoundations/open_clip) Vit-B/32  which was trained on [LAION-2B-en](https://laion.ai/blog/laion-5b/)
         - One model for ViT-B/32 trained with CLIP and pixel reconstruction
@@ -27,7 +27,7 @@ the diversity of the generated images given the same prompt.
     - Support [OpenCLIP](https://github.com/mlfoundations/open_clip) models
     - Support evaluation in the training phase
     
-- **01-04-2022**
+- **04 January 2022**
     - Support [CLOOB](https://github.com/ml-jku/cloob) as an alternative OpenAI's CLIP models
     - Support [X-transformer](https://github.com/lucidrains/x-transformers) as an alternative to MLP Mixer and VitGAN
     - New models (can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip)) ) released (see 0.3 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models):
@@ -36,7 +36,7 @@ the diversity of the generated images given the same prompt.
         - First 512x512 [model](https://github.com/mehdidc/feed_forward_vqgan_clip/releases/download/0.3/cc12m_256x16_xtransformer_clip_ViTB32_512x512_v0.3.th) based on [X-transformer](https://github.com/lucidrains/x-transformers)
     - Update [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) with Real-ESRGAN to upscale the images
 
-- **09-22-2021** 
+- **22 September 2021** 
     - New models released (see 0.2 version in https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models)
     - New [Colab notebook](https://colab.research.google.com/drive/1QYg1J4i5gurhofkvwMNrlMibMOjnjU5I?usp=sharing) for training from scratch or fine-tuning
     - [Web interface](https://replicate.ai/mehdidc/feed_forward_vqgan_clip) from [Replicate AI](https://replicate.ai/home)  to use the models
