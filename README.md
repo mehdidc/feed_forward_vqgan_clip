@@ -16,7 +16,7 @@ the diversity of the generated images given the same prompt.
 
 # News
 
-- **04-07-2022**
+- **04-08-2022**
     - [Version 0.4](https://github.com/mehdidc/feed_forward_vqgan_clip#pre-trained-models) released. New models that can be tried in the [notebook](https://colab.research.google.com/drive/1N8vvdhkvLaMefTIW_WYuJa-FflqyBnHr?usp=sharing) and on [Replicate](https://replicate.ai/mehdidc/feed_forward_vqgan_clip):
         - Two models (one for 256x256 resolution, one for 512x512 resolution) trained with [OpenCLIP](https://github.com/mlfoundations/open_clip) Vit-B/32  which was trained on [LAION-2B-en](https://laion.ai/blog/laion-5b/)
         - One model for ViT-B/32 trained with CLIP and pixel reconstruction
