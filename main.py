@@ -1289,6 +1289,7 @@ def load_model(model_path):
             
     return net
 
+
 def load_dataset(path):
     # path can be the following:
     # - a path to a text file where each line is a text prompt
