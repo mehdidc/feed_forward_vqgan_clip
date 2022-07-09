@@ -69,7 +69,7 @@ $ (ff_vqgan_clip_venv) python -m pip install -r requirements.txt
 
 #### Optional requirements
 
-- If you want to use priors (see **04-07-2022** release), please install [Net2Net](https://github.com/CompVis/net2net), e.g. with `pip install git+https://github.com/CompVis/net2net`
+- If you want to use priors (see **09 July 2022** release), please install [Net2Net](https://github.com/CompVis/net2net), e.g. with `pip install git+https://github.com/CompVis/net2net`
 
 # How to use?
 
