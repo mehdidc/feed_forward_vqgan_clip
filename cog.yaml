@@ -5,7 +5,7 @@ build:
     - "libgl1-mesa-glx"
     - "libglib2.0-0"
   python_packages:
-    - "torch==1.8.0"
+    - "torch==1.11.0"
     - "taming-transformers-rom1504==0.0.6"
     - "clip-anytorch==2.2.0"
     - "clize==4.2.0"
@@ -14,7 +14,7 @@ build:
     - "fsspec==2021.8.1"
     - "imageio==2.9.0"
     - "kornia==0.5.10"
-    - "torchvision==0.9.0"
+    - "torchvision==0.12.0"
     - "numpy==1.21.1"
     - "ipython==7.21.0"
     - "omegaconf==2.1.1"
@@ -22,9 +22,10 @@ build:
     - "pytorch-lightning==1.4.7"
     - "requests==2.26.0"
     - "tensorboard==2.6.0"
-    - "Pillow==8.3.2"
+    - "Pillow==9.0.1"
     - "torchmetrics==0.5.1"
+    - "open_clip_torch==1.2.0"
   run:
       - pip install x-transformers==0.19.1
+      - pip install git+https://github.com/CompVis/net2net
 predict: "predict.py:Predictor"
-
